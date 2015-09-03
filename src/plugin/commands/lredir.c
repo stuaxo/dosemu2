@@ -55,6 +55,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "emu.h"
 #include "memory.h"
@@ -271,36 +272,6 @@ static uint16 GetRedirection(uint16 redirIndex, char *deviceStr, char **presourc
     }
 }
 
-static int getCWD(char **presourceStr)
-{
-    char *cwd;
-    struct REGPACK preg = REGPACK_INIT;
-    uint8_t drive = sda_cur_drive(sda);
-    char dl;
-    int ret;
-
-    cwd = lowmem_alloc(64);
-    preg.r_ax = DOS_GET_CWD;
-    preg.r_dx = 0;
-    preg.r_ds = FP_SEG(cwd);
-    preg.r_si = FP_OFF(cwd);
-    intr(0x21, &preg);
-    if (preg.r_flags & CARRY_FLAG) {
-	lowmem_free(cwd, 64);
-	return preg.r_ax ?: -1;
-    }
-    dl = ((drive & 0x80) ? 'C' + (drive & 0x7f) : 'A' + drive);
-    if (cwd[0]) {
-        ret = asprintf(presourceStr, "%c:\\%s", dl, cwd);
-        assert(ret != -1);
-    } else {
-        ret = asprintf(presourceStr, "%c:", dl);
-        assert(ret != -1);
-    }
-    lowmem_free(cwd, 64);
-    return 0;
-}
-
 /********************************************
  * CancelRedirection - delete a device mapped to a remote resource
  * ON ENTRY:
@@ -495,6 +466,8 @@ int lredir_main(int argc, char **argv)
     char deviceStr2[MAX_DEVICE_STRING_LENGTH];
     char *resourceStr, *resourceStr2;
 
+    char cwdStr[FILENAME_MAX];
+    char *cwd;
 
     /* initialize the MFS, just in case the user didn't run EMUFS.SYS */
     InitMFS();
@@ -542,15 +515,13 @@ int lredir_main(int argc, char **argv)
       char *argv2;
       /* lredir c: d: */
       if (argv[2][1] == '\\') {
-        char *tmp;
-        int err = getCWD(&tmp);
-        if (err) {
+        cwd = getcwd(cwdStr, FILENAME_MAX);
+        if (cwd != NULL) {
           printf("Error: unable to get CWD\n");
           goto MainExit;
         }
-        ret = asprintf(&argv2, "%s\\%s", tmp, argv[2] + 2);
+        ret = asprintf(&argv2, "%s\\%s", cwd, argv[2] + 2);
         assert(ret != -1);
-        free(tmp);
       } else {
         argv2 = strdup(argv[2]);
       }
