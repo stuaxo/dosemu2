@@ -33,6 +33,13 @@
  * Changes: 20010402 Hans Lermen
  *   Ported to buildin_apps, compiled directly into dosemu
  *
+ * Changes 201509 Stuart Axon
+ *   Move to same style as unix.c
+ *   Fixes to parameter handling to follow the comments.
+ *   Remove ancient check for dosc
+ *   Remove internal impementation of getcwd
+ *   Return ERRORLEVEL if usage shown
+ *
  *
  * NOTES:
  *  LREDIR supports the following commands:
