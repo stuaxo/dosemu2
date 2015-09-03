@@ -231,8 +231,7 @@ int lredir_main(int argc, char **argv)
         resourceStr = strdup(argv[1] + 3);
 	carg = 2;
     } else {
-	printf("lredir: Invalid arguments\n");
-	return(0);
+	return usage();
     }
     deviceParam = DEFAULT_REDIR_PARAM;
 
