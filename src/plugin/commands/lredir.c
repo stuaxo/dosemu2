@@ -515,7 +515,7 @@ int lredir_main(int argc, char **argv)
       printf("  If R is specified, the drive will be read-only\n");
       printf("  If C is specified, (read-only) CDROM n is used (n=1 by default)\n");
       printf("  ${home} represents user's home directory\n\n");
-      printf("  If drive is not specified, the next available drive will be used.");
+      printf("  If drive is not specified, the next available drive will be used.\n\n");
       printf("LREDIR X: Y:\n");
       printf("  Redirect drive X: to where the drive Y: is redirected.\n");
       printf("  If F is specified, the path for Y: is taken from its emulated "
