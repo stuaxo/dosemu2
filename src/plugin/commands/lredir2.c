@@ -34,6 +34,8 @@
 #include <stdio.h>    /* printf  */
 #include <stdlib.h>
 
+#define printf	com_printf
+
 static int usage (void);
 
 
@@ -44,7 +46,7 @@ int lredir2_main(int argc, char **argv)
 
 static int usage(void)
 {
-  fprintf(stderr,
+  printf(
     "Usage: LREDIR2 [[-u] [drive-letter] [/unix/path]]\n"
   );
   return (1);
