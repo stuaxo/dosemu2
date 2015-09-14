@@ -295,25 +295,26 @@ MainExit:
 
 static int usage (void)
 {
-  printf("Usage: LREDIR [[drive:] LINUX\\FS\\path [R] | [C [n]] | HELP]\n");
-  printf("Redirect a drive to the Linux file system.\n\n");
-  printf("LREDIR X: LINUX\\FS\\tmp\n");
-  printf("  Redirect drive X: to /tmp of Linux file system for read/write\n");
-  printf("  If R is specified, the drive will be read-only\n");
-  printf("  If C is specified, (read-only) CDROM n is used (n=1 by default)\n");
-  printf("  ${home} represents user's home directory\n\n");
-  printf("  If drive is not specified, the next available drive will be used.\n\n");
-  printf("LREDIR X: Y:\n");
-  printf("  Redirect drive X: to where the drive Y: is redirected.\n");
-  printf("  If F is specified, the path for Y: is taken from its emulated "
-         "FAT volume.\n\n");
-  printf("LREDIR DEL drive:\n");
-  printf("  delete a drive redirection\n\n");
-  printf("LREDIR\n");
-  printf("  show current drive redirections\n\n");
-  printf("LREDIR HELP\n");
-  printf("  show this help screen\n");
-
+  printf(
+    "Usage: LREDIR [[drive:] LINUX\\FS\\path [R] | [C [n]] | HELP]\n"
+    "Redirect a drive to the Linux file system.\n\n"
+    "LREDIR X: LINUX\\FS\\tmp\n"
+    "  Redirect drive X: to /tmp of Linux file system for read/write\n"
+    "  If R is specified, the drive will be read-only\n"
+    "  If C is specified, (read-only) CDROM n is used (n=1 by default)\n"
+    "  ${home} represents user's home directory\n\n"
+    "  If drive is not specified, the next available drive will be used.\n\n"
+    "LREDIR X: Y:\n"
+    "  Redirect drive X: to where the drive Y: is redirected.\n"
+    "  If F is specified, the path for Y: is taken from its emulated "
+    "FAT volume.\n\n"
+    "LREDIR DEL drive:\n"
+    "  delete a drive redirection\n\n"
+    "LREDIR\n"
+    "  show current drive redirections\n\n"
+    "LREDIR HELP\n"
+    "  show this help screen\n"
+  );
   return (1);
 }
 
