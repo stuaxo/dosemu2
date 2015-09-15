@@ -138,9 +138,12 @@ static int list_redirections(bool show_drives, bool show_printers) {
  *  I show the read-only attribute for each drive
  *    which is returned in deviceParam.
  *************************************/
+// FROM LREDIR
 static void
 old_display_redirections(void)
 {
+  // TODO
+  // Drive H is mounted as local directory /home/username
     int driveCount;
     uint16 redirIndex, deviceParam, ccode;
     uint8 deviceType;
@@ -156,20 +159,23 @@ old_display_redirections(void)
       /* only print disk redirections here */
       if (deviceType == REDIR_DISK_TYPE) {
         if (driveCount == 0) {
-          printf("Current Drive Redirections:\n");
+          printf("Current mounted drives are:\n");
         }
         driveCount++;
-        printf("%-2s = %-20s ", deviceStr, resourceStr);
+        printf("Drive %-2s is mounted as local directory %-20s ", deviceStr, resourceStr);
 
         /* read attribute is returned in the device parameter */
         if (deviceParam & 0x80) {
-	  if ((deviceParam & 0x7f) > 1)
+	  if ((deviceParam & 0x7f) > 1) {
 	    printf("CDROM:%d ", (deviceParam & 0x7f) - 1);
-          if (((deviceParam & 0x7f) != 0) == READ_ONLY_DRIVE_ATTRIBUTE)
+      }
+      else {
+      if (((deviceParam & 0x7f) != 0) == READ_ONLY_DRIVE_ATTRIBUTE)
 	    printf("attrib = READ ONLY\n");
 	  else
 	    printf("attrib = READ/WRITE\n");
         }
+      }
       }
 
       free(resourceStr);
