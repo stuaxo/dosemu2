@@ -700,6 +700,30 @@ static int do_repl(char *argv, char **resourceStr)
     return 0;
 }
 
+void lredir2_usage()
+{
+    printf("Usage: LREDIR2 <options> [drive:] [LINUX\\FS\\path | DOS_path]\n");
+    printf("Redirect a drive to the Linux file system.\n\n");
+    printf("LREDIR X: LINUX\\FS\\tmp\n");
+    printf("  Redirect drive X: to /tmp of Linux file system for read/write\n");
+    printf("  If -R is specified, the drive will be read-only\n");
+    printf("  If -C is specified, (read-only) CDROM n is used (n=1 by default)\n");
+    printf("  If -n is specified, the next available drive will be used.\n");
+    printf("\n");
+    printf("LREDIR -r X: DOS_path\n");
+    printf("  Redirect drive X: to DOS_path.\n");
+    printf("  If -n is specified, the next available drive will be used.\n");
+    printf("\n");
+    printf("LREDIR -d drive:\n");
+    printf("  delete a drive redirection\n");
+    printf("\n");
+    printf("LREDIR\n");
+    printf("  show current drive redirections\n");
+    printf("\n");
+    printf("LREDIR -h\n");
+    printf("  show this help screen\n");
+}
+
 int lredir2_main(int argc, char **argv)
 {
     uint16 ccode = 0;
@@ -725,26 +749,7 @@ int lredir2_main(int argc, char **argv)
     while ((c = getopt(argc, argv, getopt_string)) != EOF) {
 	switch (c) {
 	case 'h':
-	    printf("Usage: LREDIR2 <options> [drive:] [LINUX\\FS\\path | DOS_path]\n");
-	    printf("Redirect a drive to the Linux file system.\n\n");
-	    printf("LREDIR X: LINUX\\FS\\tmp\n");
-	    printf("  Redirect drive X: to /tmp of Linux file system for read/write\n");
-	    printf("  If -R is specified, the drive will be read-only\n");
-	    printf("  If -C is specified, (read-only) CDROM n is used (n=1 by default)\n");
-	    printf("  If -n is specified, the next available drive will be used.\n");
-	    printf("\n");
-	    printf("LREDIR -r X: DOS_path\n");
-	    printf("  Redirect drive X: to DOS_path.\n");
-	    printf("  If -n is specified, the next available drive will be used.\n");
-	    printf("\n");
-	    printf("LREDIR -d drive:\n");
-	    printf("  delete a drive redirection\n");
-	    printf("\n");
-	    printf("LREDIR\n");
-	    printf("  show current drive redirections\n");
-	    printf("\n");
-	    printf("LREDIR -h\n");
-	    printf("  show this help screen\n");
+        lredir2_usage();
 	    return 0;
 
 	case 'd':
