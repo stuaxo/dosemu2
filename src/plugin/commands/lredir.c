@@ -373,6 +373,9 @@ ShowMyRedirections(void)
 	    printf("attrib = READ/WRITE\n");
         }
       }
+      else {
+        printf("non drive %d", driveCount);
+      }
 
       free(resourceStr);
       redirIndex++;
@@ -651,6 +654,33 @@ MainExit:
     return (ccode);
 }
 
+static void show_printer_redirections()
+{
+    struct printer pptr = {0};
+    int prnum;
+    int num_printers = lpt_get_max();
+    int header_shown = 0;
+    if (! num_printers)
+    {
+        return;
+    }
+
+    memset(&pptr, 0, sizeof(pptr));
+    for(prnum = 0; prnum < num_printers; prnum++)
+    {
+        if (lpt_is_configured(prnum) != 0)
+        {
+            if ( header_shown == 0)
+            {
+                header_shown = 1;
+                printf("Printers:\n");
+            }
+            get_printer_config(prnum, &pptr);
+            printf("LPT%d: %s\n", prnum, (pptr.prtcmd ? pptr.prtcmd : ""));
+        }
+    }
+}
+
 static int do_repl(char *argv, char **resourceStr)
 {
     int is_cwd, is_drv, ret;
@@ -700,7 +730,7 @@ static int do_repl(char *argv, char **resourceStr)
     return 0;
 }
 
-void lredir2_usage()
+static void lredir2_usage()
 {
     printf("Usage: LREDIR2 <options> [drive:] [LINUX\\FS\\path | DOS_path]\n");
     printf("Redirect a drive to the Linux file system.\n\n");
@@ -714,11 +744,11 @@ void lredir2_usage()
     printf("  Redirect drive X: to DOS_path.\n");
     printf("  If -n is specified, the next available drive will be used.\n");
     printf("\n");
-    printf("LREDIR -d drive:\n");
-    printf("  delete a drive redirection\n");
+    printf("LREDIR -d [drive:|printer]\n");
+    printf("  delete a drive or printer redirection\n");
     printf("\n");
     printf("LREDIR\n");
-    printf("  show current drive redirections\n");
+    printf("  show drive redirections\n");
     printf("\n");
     printf("LREDIR -h\n");
     printf("  show this help screen\n");
@@ -732,7 +762,7 @@ int lredir2_main(int argc, char **argv)
     char deviceStr[MAX_DEVICE_STRING_LENGTH];
     char *resourceStr;
     char c;
-    const char *getopt_string = "hd:C::Rrn";
+    const char *getopt_string = "hpd:C::Rrn";
     int cdrom = 0, ro = 0, repl = 0, nd = 0;
 
     /* initialize the MFS, just in case the user didn't run EMUFS.SYS */
@@ -755,6 +785,10 @@ int lredir2_main(int argc, char **argv)
 	case 'd':
 	    DeleteDriveRedirection(optarg);
 	    return 0;
+
+    case 'p':
+        show_printer_redirections();
+        return 0;
 
 	case 'C':
 	    cdrom = (optarg ? atoi(optarg) : 1);

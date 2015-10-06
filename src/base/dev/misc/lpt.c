@@ -350,6 +350,18 @@ void printer_print_config(int prnum, void (*print)(const char *, ...))
 	   (pptr->dev ? pptr->dev : ""), pptr->base_port);
 }
 
+void get_printer_config(int prnum, struct printer *destptr)
+{
+  struct printer *pptr;
+
+  if (prnum < NUM_PRINTERS) {
+    pptr = &lpt[prnum];
+    destptr->prtcmd = pptr->prtcmd;
+    destptr->dev = pptr->dev;
+    destptr->delay = pptr->delay;
+  }
+}
+
 int lpt_get_max(void)
 {
   return NUM_PRINTERS;
