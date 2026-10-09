@@ -177,9 +177,9 @@ If an entry of $_cdrom ends in .cue or .chd, dosemu2 reads it as a CD
 image instead of a Linux device: BIN/CUE (single or per-track BINs,
 INDEX 00/01, PREGAP and POSTGAP are honoured) or a MAME CHD (needs libchdr
 at build time, see <command>./configure --without-libchdr</command>).
-The image answers what MSCDEX asks the driver for: sector reads (for
-example the ISO 9660 volume descriptor), the table of contents, the
-Q-channel and CD audio, which is played through the dosemu2 mixer. A track
+The image answers what MSCDEX asks the driver for: sector reads (the
+data track, as 2048 byte sectors), the table of contents, the Q-channel and
+CD audio, which is played through the dosemu2 mixer. A track
 that begins with hidden audio before its INDEX 01 can be played from the
 pregap, and the Q-channel relative time counts down through it as on a
 real disc.
@@ -191,10 +191,13 @@ real disc.
 </screen>
 
 <para>
-The files that a game reads from the disc are not taken from the image:
-extract them to a directory and map it with the "c" flag (or lredir with
-the C option) as above. The directory holding the .cue or .chd is made
-readable by the sandbox, so keep the BIN files next to it.
+Files are reached the same way as with a real drive. Load cdrom.sys and a
+DOS CD extension (mscdex or shsucdx) and DOS reads the ISO 9660 file system
+from the image through the driver. Alternatively extract the files into a
+directory and map it with lredir and the C option (or the "c" flag of
+$_hostfs_drives); the image then only supplies the low-level side. The
+directory holding the .cue or .chd is made readable by the sandbox, so keep
+the BIN files next to it.
 </para>
 
 <para>
