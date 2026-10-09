@@ -74,7 +74,8 @@ from func_mfs_read_write import mfs_file_read, mfs_file_write
 from func_mscdex_iso import (mscdex_iso_files, mscdex_nul_redirect_cue,
                              mscdex_nul_redirect_iso)
 from func_mscdex_seek import mscdex_seek
-from func_mscdex_image import mscdex_image, mscdex_image_toc
+from func_mscdex_image import mscdex_image, mscdex_image_files_cue, \
+    mscdex_image_files_multi, mscdex_image_toc
 from func_mscdex_stub import mscdex_stub
 from func_kernel_cmdline import kernel_cmdline
 from func_findfile import (mfs_findfile_ufs_lfn, mfs_findfile_ufs_sfn,
@@ -141,6 +142,14 @@ class OurTestCase(BaseTestCase):
     def test_mscdex_image_toc(self):
         """MSCDEX disc and track info from a BIN/CUE image"""
         mscdex_image_toc(self)
+
+    def test_mscdex_image_files_cue(self):
+        """Read a file from a BIN/CUE data track with SHSUCDX"""
+        mscdex_image_files_cue(self)
+
+    def test_mscdex_image_files_multi(self):
+        """Read a file from a one-BIN-per-track CUE with SHSUCDX"""
+        mscdex_image_files_multi(self)
 
     def test_kernel_cmdline(self):
         """Kernel command line selects config file"""
