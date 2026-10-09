@@ -6,7 +6,9 @@ from common_os import ppdosgit
 from func_build_freecom import build_freecom
 from func_build_freedos import build_freedos
 from func_build_pcmos import build_pcmos
-from func_command_com_builtins import command_com_copy, command_com_keyword_exist
+from func_command_com_builtins import (command_com_copy,
+                                       command_com_copy_wildcard,
+                                       command_com_keyword_exist)
 from func_command_com_cmdline_length import command_com_cmdline_length
 from func_command_com_psp_checks import command_com_psp_fcbs
 
@@ -78,6 +80,12 @@ class OurTestCase(BaseTestCase):
     def test_command_copy(self):
         """Command.com command copy"""
         command_com_copy(self)
+
+    def test_command_copy_wildcard(self):
+        """Command.com command copy with wildcards"""
+        if self.__class__.__name__ == 'TestCase32':
+            self.skipTest("wildcard copy fixed in comcom64 only")
+        command_com_copy_wildcard(self)
 
     def test_command_keyword_exist(self):
         """Command.com keyword exist"""
