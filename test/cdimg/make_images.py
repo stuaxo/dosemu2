@@ -60,6 +60,11 @@ def mode1_sectors(user, count, first_lba=0):
     return bytes(out)
 
 
+def big_file():
+    """20000 bytes (10 sectors) of deterministic, position dependent data."""
+    return bytes((i * 7 + (i >> 8) * 13 + 1) & 0xff for i in range(20000))
+
+
 def iso_image(workdir, sectors):
     for tool in ('genisoimage', 'mkisofs'):
         if shutil.which(tool):
@@ -73,6 +78,8 @@ def iso_image(workdir, sectors):
     os.makedirs(src, exist_ok=True)
     with open(os.path.join(src, 'HELLO.TXT'), 'w') as f:
         f.write('hello from the cd image test\n')
+    with open(os.path.join(src, 'BIG.DAT'), 'wb') as f:
+        f.write(big_file())
     iso = os.path.join(workdir, 'data.iso')
     subprocess.run(cmd + ['-quiet', '-V', 'CDIMGTEST', '-o', iso, src],
                    check=True, stderr=subprocess.DEVNULL)
