@@ -169,6 +169,34 @@ the others will get assigned successive driveletters.
 </para>
 
 <para>
+CD images with audio tracks:
+</para>
+
+<para>
+If an entry of $_cdrom is a CD image file, dosemu2 reads it as a CD
+image instead of a Linux device. BIN/CUE is built in: the entry is the CUE
+sheet, a file that ends in .cue or starts like one (single or per-track
+BINs, INDEX 00/01, PREGAP and POSTGAP are honoured).
+The image answers what MSCDEX asks the driver for: sector reads (the
+data track, as 2048 byte sectors) and the table of contents.
+</para>
+
+<screen>
+  $_cdrom = "/home/me/games/game.cue"
+  $_hostfs_drives = "/home/me/games/game_files:c"
+</screen>
+
+<para>
+Files are reached the same way as with a real drive. Load cdrom.sys and a
+DOS CD extension (mscdex or shsucdx) and DOS reads the ISO 9660 file system
+from the image through the driver. Alternatively extract the files into a
+directory and map it with lredir and the C option (or the "c" flag of
+$_hostfs_drives); the image then only supplies the low-level side. The
+directory holding the .cue is made readable by the sandbox, so keep
+the BIN files next to it.
+</para>
+
+<para>
 History:
 </para>
 
