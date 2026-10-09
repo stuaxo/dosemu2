@@ -714,3 +714,48 @@ def mscdex_image_files_chd(self):
     if not shutil.which("chdman"):
         raise SkipTest("needs chdman to build a CHD")
     _cd_files(self, "simple/simple.chd", "CHD")
+
+
+def mscdex_image_real(self):
+    # Optional: point DOSEMU_TEST_CD_IMAGES at one or more real .cue/.chd
+    # files (space separated).  For each, SHSUCDX must mount it and DIR of
+    # the root must list something.  Nothing from these images is stored in
+    # the repository.  With DOSEMU_TEST_CD_COPY=DIR\\FILE (a path in the
+    # image of the first one) and DOSEMU_TEST_CD_SHA256 that file is also
+    # copied out and its hash compared.
+    import hashlib
+    import os
+    images = os.environ.get("DOSEMU_TEST_CD_IMAGES", "").split()
+    if not images:
+        raise SkipTest("set DOSEMU_TEST_CD_IMAGES to try real discs")
+    cdext = Path(self.topdir) / "test-binaries" / "shsucdx.com"
+    if not cdext.exists():
+        raise SkipTest("needs test-binaries/shsucdx.com")
+    shutil.copy(cdext, Path(self.workdir) / "shsucdx.com")
+    copy = os.environ.get("DOSEMU_TEST_CD_COPY")
+    want = os.environ.get("DOSEMU_TEST_CD_SHA256")
+    for n, image in enumerate(images):
+        config = """\
+$_hdimage = "dXXXXs/c:hdtype1 +1"
+$_floppy_a = ""
+$_cdrom = "%s"
+""" % image
+        cmd = "copy g:\\%s c:\\copied.dat\r\n" % copy if copy and n == 0 else ""
+        self.mkfile("testit.bat", """\
+c:\\shsucdx /d:mscd0001 /l:g
+g:
+dir
+%sc:
+rem end
+""" % cmd, newline="\r\n")
+        results = self.runDosemu("testit.bat", config=config)
+        self.assertRegex(results, r"([1-9]\d*) (file|dir)\(s\)",
+                         "%s\n%s" % (image, results))
+        self.assertNotIn("Invalid", results, image)
+        print("\n--- %s\n%s" % (image, results))
+        if cmd:
+            got = (Path(self.workdir) / "copied.dat").read_bytes()
+            digest = hashlib.sha256(got).hexdigest()
+            print("copied %s: %d bytes sha256 %s" % (copy, len(got), digest))
+            if want:
+                self.assertEqual(digest, want, results)
