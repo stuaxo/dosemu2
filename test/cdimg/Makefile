@@ -17,6 +17,9 @@ endif
 cd_image_test: cd_image_test.c $(SRCS) $(DRV)/cd_image.h
 	$(CC) $(CFLAGS) -o $@ cd_image_test.c $(SRCS) $(LIBS)
 
+cd_image_tool: cd_image_tool.c $(SRCS) $(DRV)/cd_image.h
+	$(CC) $(CFLAGS) -o $@ cd_image_tool.c $(SRCS) $(LIBS)
+
 $(OUT)/.stamp: make_images.py
 	python3 -I make_images.py $(OUT) && touch $@
 
@@ -24,4 +27,4 @@ check: cd_image_test $(OUT)/.stamp
 	./cd_image_test $(OUT)
 
 clean:
-	rm -rf cd_image_test $(OUT)
+	rm -rf cd_image_test cd_image_tool $(OUT)
