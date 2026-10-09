@@ -7,6 +7,9 @@ OUT ?= out
 cd_image_test: cd_image_test.c $(DRV)/cd_image.c $(DRV)/cd_cue.c $(DRV)/cd_image.h
 	$(CC) $(CFLAGS) -o $@ cd_image_test.c $(DRV)/cd_image.c $(DRV)/cd_cue.c -lm
 
+cd_image_tool: cd_image_tool.c $(SRCS) $(DRV)/cd_image.h
+	$(CC) $(CFLAGS) -o $@ cd_image_tool.c $(SRCS) $(LIBS)
+
 $(OUT)/.stamp: make_images.py
 	python3 -I make_images.py $(OUT) && touch $@
 
@@ -14,4 +17,4 @@ check: cd_image_test $(OUT)/.stamp
 	./cd_image_test $(OUT)
 
 clean:
-	rm -rf cd_image_test $(OUT)
+	rm -rf cd_image_test cd_image_tool $(OUT)
