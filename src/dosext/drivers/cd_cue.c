@@ -8,6 +8,7 @@
  */
 #define _FILE_OFFSET_BITS 64
 #include <ctype.h>
+#include <errno.h>
 #include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -207,7 +208,7 @@ cd_image_t *cd_cue_open(const char *path)
 	int i;
 
 	if (!fp) {
-		cd_log("%s: cannot open\n", path);
+		cd_log("%s: cannot open: %s\n", path, strerror(errno));
 		return NULL;
 	}
 	img = calloc(1, sizeof(*img));
