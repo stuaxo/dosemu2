@@ -5,6 +5,8 @@ import sys
 from pathlib import Path
 from unittest import SkipTest
 
+from common_framework import BINSDIR
+
 
 def _make_images(self):
     """Generate the BIN/CUE fixtures once per test into the test's dir."""
@@ -661,3 +663,56 @@ $_wav_file = "%s"
     zc = sum(1 for i in range(1, len(seg)) if (seg[i - 1] < 0) != (seg[i] < 0))
     freq = zc / 2 / 1.5
     self.assertAlmostEqual(freq, 220, delta=5, msg=str(freq))
+
+
+def _cd_files(self, image, label):
+    # Read a file off the data track of an image with a real DOS CD
+    # extension.  SHSUCDX talks to dosemu2's cdrom.sys, parses the ISO 9660
+    # file system itself and so exercises directory and file reads through
+    # the image, not just single sectors.
+    out = _make_images(self)
+    pkg = Path(self.topdir) / BINSDIR / "shsucdx.zip"
+    content = subprocess.check_output(
+        ["unzip", "-p", "-C", str(pkg), "bin/shsucdx.com"])
+    (Path(self.workdir) / "shsucdx.com").write_bytes(content)
+
+    config = """\
+$_hdimage = "dXXXXs/c:hdtype1 +1"
+$_floppy_a = ""
+$_cdrom = "%s"
+""" % (out / image)
+
+    self.mkfile("testit.bat", """\
+c:\\shsucdx /d:mscd0001 /l:g
+g:
+dir
+type hello.txt
+copy big.dat c:\\bigcopy.dat
+c:
+rem end
+""", newline="\r\n")
+
+    results = self.runDosemu("testit.bat", config=config)
+    self.assertIn("HELLO", results, "%s: file not listed\n%s" % (label, results))
+    self.assertIn("hello from the cd image test", results,
+                  "%s: file not read\n%s" % (label, results))
+
+    # a file spanning ten sectors must come back byte for byte
+    want = bytes((i * 7 + (i >> 8) * 13 + 1) & 0xff for i in range(20000))
+    got = (Path(self.workdir) / "bigcopy.dat").read_bytes()
+    self.assertEqual(len(got), len(want), "%s: BIG.DAT size\n%s" % (label, results))
+    self.assertEqual(got, want, "%s: BIG.DAT contents differ" % label)
+
+
+def mscdex_image_files_cue(self):
+    _cd_files(self, "simple/simple.cue", "BIN/CUE, data track first")
+
+
+def mscdex_image_files_multi(self):
+    _cd_files(self, "multi/multi.cue", "BIN/CUE, one BIN per track")
+
+
+def mscdex_image_files_chd(self):
+    if not shutil.which("chdman"):
+        raise SkipTest("needs chdman to build a CHD")
+    _cd_files(self, "simple/simple.chd", "CHD")
