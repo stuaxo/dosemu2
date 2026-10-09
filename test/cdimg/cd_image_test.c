@@ -18,11 +18,11 @@ static int failures, checks;
 	} \
 } while (0)
 
-static char dir[512];
+static char dir[256];
 
 static cd_image_t *open_img(const char *rel)
 {
-	char p[1024];
+	char p[2048];
 
 	snprintf(p, sizeof(p), "%s/%s", dir, rel);
 	return cd_image_open(p);
@@ -188,18 +188,143 @@ static void test_errors(void)
 	remove(p);
 }
 
+
+#ifdef HAVE_LIBCHDR
+static void same_disc(cd_image_t *a, cd_image_t *b)
+{
+	uint32_t lba;
+	int i;
+
+	CHECK(a->ntracks == b->ntracks);
+	CHECK(a->leadout_lba == b->leadout_lba);
+	for (i = 0; i < a->ntracks && i < b->ntracks; i++) {
+		const cd_track_t *x = &a->tracks[i], *y = &b->tracks[i];
+
+		CHECK(x->num == y->num);
+		CHECK(x->is_audio == y->is_audio);
+		CHECK(x->mode == y->mode);
+		CHECK(x->lba_start == y->lba_start);
+		CHECK(x->index1_lba == y->index1_lba);
+		CHECK(x->end_lba == y->end_lba);
+		CHECK(x->first_stored_lba == y->first_stored_lba);
+		/* meaningless for a zero-length pregap */
+		if (x->index1_lba > x->lba_start)
+			CHECK(x->pregap_in_file == y->pregap_in_file);
+	}
+	for (lba = 0; lba < a->leadout_lba; lba++) {
+		int16_t pa[CD_AUDIO_FRAMES * 2], pb[CD_AUDIO_FRAMES * 2];
+		uint8_t ca[2048], cb[2048];
+		const cd_track_t *t = cd_image_find_track(a, lba);
+
+		CHECK(cd_image_read_audio(a, lba, pa) == 0);
+		CHECK(cd_image_read_audio(b, lba, pb) == 0);
+		if (memcmp(pa, pb, sizeof(pa))) {
+			CHECK(!"PCM differs");
+			break;
+		}
+		if (t && !t->is_audio) {
+			CHECK(cd_image_read_cooked(a, lba, ca) == 0);
+			CHECK(cd_image_read_cooked(b, lba, cb) == 0);
+			if (memcmp(ca, cb, sizeof(ca))) {
+				CHECK(!"cooked data differs");
+				break;
+			}
+		}
+	}
+}
+
+static void test_chd(void)
+{
+	static const char *const names[] = { "simple/simple", "hidden/hidden" };
+	char p[1024];
+	size_t k;
+	FILE *f;
+
+	for (k = 0; k < 2; k++) {
+		cd_image_t *cue, *chd;
+
+		snprintf(p, sizeof(p), "%s.cue", names[k]);
+		cue = open_img(p);
+		snprintf(p, sizeof(p), "%s.chd", names[k]);
+		chd = open_img(p);
+		CHECK(cue != NULL);
+		if (!chd) {
+			fprintf(stderr, "SKIP: no %s (chdman missing?)\n", p);
+			cd_image_close(cue);
+			continue;
+		}
+		CHECK(chd->audio_big_endian && !cue->audio_big_endian);
+		if (cue)
+			same_disc(cue, chd);
+		cd_image_close(cue);
+		cd_image_close(chd);
+	}
+
+	/* hunk cache: re-reading the same sector must not decompress again */
+	{
+		cd_image_t *chd = open_img("hidden/hidden.chd");
+		int16_t pcm[CD_AUDIO_FRAMES * 2];
+		unsigned n;
+		uint32_t lba;
+
+		if (chd) {
+			CHECK(cd_image_read_audio(chd, 460, pcm) == 0);
+			n = cd_chd_hunk_reads(chd);
+			CHECK(n >= 1);
+			CHECK(cd_image_read_audio(chd, 460, pcm) == 0);
+			CHECK(cd_chd_hunk_reads(chd) == n);
+			n = cd_chd_hunk_reads(chd);
+			for (lba = 460; lba < 476; lba++)
+				CHECK(cd_image_read_audio(chd, lba, pcm) == 0);
+			CHECK(cd_chd_hunk_reads(chd) - n <= 3);
+			cd_image_close(chd);
+		}
+	}
+
+	/* not a CHD at all, and a truncated one */
+	snprintf(p, sizeof(p), "%s/fake.chd", dir);
+	f = fopen(p, "w");
+	fputs("this is not a chd file\n", f);
+	fclose(f);
+	CHECK(cd_image_open(p) == NULL);
+	{
+		char src[1024], buf[4096];
+		size_t n;
+
+		snprintf(src, sizeof(src), "%s/hidden/hidden.chd", dir);
+		f = fopen(src, "rb");
+		if (f) {
+			n = fread(buf, 1, sizeof(buf), f);
+			fclose(f);
+			f = fopen(p, "wb");
+			fwrite(buf, 1, n, f);
+			fclose(f);
+			CHECK(cd_image_open(p) == NULL);
+		}
+	}
+	remove(p);
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	if (argc != 2) {
 		fprintf(stderr, "usage: %s IMGDIR\n", argv[0]);
 		return 2;
 	}
-	snprintf(dir, sizeof(dir), "%s", argv[1]);
+	if (strlen(argv[1]) >= sizeof(dir))
+		return 2;
+	strcpy(dir, argv[1]);
 	test_helpers();
 	test_simple();
 	test_hidden();
 	test_multi();
 	test_errors();
+#ifdef HAVE_LIBCHDR
+	test_chd();
+#else
+	fprintf(stderr, "SKIP: built without libchdr\n");
+#endif
 	printf("%d checks, %d failures\n", checks, failures);
 	return failures != 0;
 }
