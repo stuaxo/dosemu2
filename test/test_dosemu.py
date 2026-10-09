@@ -74,7 +74,8 @@ from func_mfs_read_write import mfs_file_read, mfs_file_write
 from func_mscdex_iso import mscdex_iso_files, mscdex_nul_redirect_iso
 from func_mscdex_image import mscdex_image, mscdex_image_audio, \
     mscdex_image_files_chd, mscdex_image_files_cue, \
-    mscdex_image_files_multi, mscdex_image_sound, mscdex_image_toc
+    mscdex_image_files_multi, mscdex_image_real, mscdex_image_sound, \
+    mscdex_image_toc
 from func_mscdex_stub import mscdex_stub
 from func_kernel_cmdline import kernel_cmdline
 from func_findfile import (mfs_findfile_ufs_lfn, mfs_findfile_ufs_sfn,
@@ -153,6 +154,10 @@ class OurTestCase(BaseTestCase):
     def test_mscdex_image_files_chd(self):
         """Read a file from a CHD with SHSUCDX"""
         mscdex_image_files_chd(self)
+
+    def test_mscdex_image_real(self):
+        """Mount real CD images (DOSEMU_TEST_CD_IMAGES) with SHSUCDX"""
+        mscdex_image_real(self)
 
     def test_kernel_cmdline(self):
         """Kernel command line selects config file"""
