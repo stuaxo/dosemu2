@@ -73,6 +73,7 @@ TEST_BINARIES = (
 TEST_FREEDOS_HOST = "https://www.ibiblio.org/pub/micro/pc-stuff/freedos/files/repositories/1.4"
 TEST_FREEDOS_PKGS = (
     'base/mem.zip',
+    'base/shsucdx.zip',
     'devel/dj_make.zip',
     'devel/nasm.zip',
     'devel/watcomc.zip',
@@ -158,6 +159,15 @@ def get_test_binaries():
             "-O", f"{zout}",
             f"{TEST_FREEDOS_HOST}/{zfile}",
         ], stderr=STDOUT, cwd=tbindir)
+
+
+def install_shsucdx(self):
+    """Put SHSUCDX, from the FreeDOS package, on the test's C drive."""
+    pkg = Path(self.topdir) / BINSDIR / "shsucdx.zip"
+    if not pkg.exists():
+        self.skipTest("%s missing, run with --get-test-binaries" % pkg.name)
+    content = check_output(["unzip", "-p", "-C", str(pkg), "bin/shsucdx.com"])
+    (Path(self.workdir) / "shsucdx.com").write_bytes(content)
 
 
 def mark(attr_names):
