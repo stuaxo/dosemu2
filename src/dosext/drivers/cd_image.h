@@ -66,6 +66,17 @@ int cd_image_read_cooked(cd_image_t *img, uint32_t lba, uint8_t *out2048);
 int cd_image_read_audio(cd_image_t *img, uint32_t lba,
 			int16_t *pcm /* 588*2 */);
 
+/* Sub-channel Q data for the head at lba. */
+typedef struct {
+	uint8_t  ctrl_adr;	/* (ADR << 4) | control: 0x10 audio, 0x14 data */
+	uint8_t  track;		/* 1..n, or 0xAA at/after the lead-out */
+	uint8_t  index;		/* 0 inside the pregap, 1 from INDEX 01 on */
+	uint32_t rel_frames;	/* distance to INDEX 01: counts down through
+				 * the pregap to 0, then up through the track */
+	uint32_t abs_lba;
+} cd_qpos_t;
+void cd_image_qpos(const cd_image_t *img, uint32_t lba, cd_qpos_t *q);
+
 uint32_t cd_msf_to_lba(uint8_t m, uint8_t s, uint8_t f);
 void cd_lba_to_msf(uint32_t lba, uint8_t *m, uint8_t *s, uint8_t *f);
 
