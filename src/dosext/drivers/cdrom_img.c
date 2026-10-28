@@ -80,6 +80,18 @@ static cd_image_t *get_image(int idx, const char *path)
 	return cd_img[idx];
 }
 
+/* Red Book address as the driver returns it: frame, second, minute, 0 */
+static void put_msf(unsigned char *p, uint32_t lba)
+{
+	uint8_t m, s, f;
+
+	cd_lba_to_msf(lba, &m, &s, &f);
+	p[0] = f;
+	p[1] = s;
+	p[2] = m;
+	p[3] = 0;
+}
+
 static void fail(int code)
 {
 	HI(ax) = code;
@@ -187,6 +199,40 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
 			audio_status.status |= 0x2;
 		LO(ax) = 0;
 		break;
+	case 0x10:			/* audio disk info */
+		LWORD(eax) = 0;
+		req_buf = SEG_ADR((unsigned char *), ds, si);
+		*CALC_PTR(req_buf, MSCD_DISKINFO_LTN, u_char) =
+			img->tracks[0].num;
+		*CALC_PTR(req_buf, MSCD_DISKINFO_HTN, u_char) =
+			img->tracks[img->ntracks - 1].num;
+		put_msf(req_buf + MSCD_DISKINFO_LEADOUT, img->leadout_lba);
+		break;
+	case 0x11: {			/* track info */
+		int ctrl;
+		uint32_t lba;
+		unsigned trk;
+
+		req_buf = SEG_ADR((unsigned char *), ds, si);
+		trk = *CALC_PTR(req_buf, MSCD_TRACKINFO_TRACKNUM, u_char);
+		C_printf("CDROM: image track info, track %u\n", trk);
+		if (trk == 0xAA) {		/* lead-out */
+			lba = img->leadout_lba;
+			ctrl = img->tracks[img->ntracks - 1].is_audio ? 0 : 4;
+		} else if (trk >= 1 && trk <= (unsigned)img->ntracks) {
+			lba = img->tracks[trk - 1].index1_lba;
+			ctrl = img->tracks[trk - 1].is_audio ? 0 : 4;
+		} else {
+			/* MSCDEX reads beyond the last track; not an error to log */
+			LO(ax) = 1;
+			break;
+		}
+		put_msf(req_buf + MSCD_TRACKINFO_TRACKPOS, lba);
+		*CALC_PTR(req_buf, MSCD_TRACKINFO_CTRL, u_char) =
+			ctrl << 4 | 0x20;	/* as cdrom.c does for devices */
+		LO(ax) = 0;
+		break;
+	}
 	case 0x12:			/* volume size */
 		req_buf = SEG_ADR((unsigned char *), ds, si);
 		*CALC_PTR(req_buf, MSCD_GETVOLUMESIZE_SIZE, int) =
