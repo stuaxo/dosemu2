@@ -146,6 +146,42 @@ static void test_hidden(void)
 	cd_image_close(img);
 }
 
+static void test_qpos(void)
+{
+	cd_image_t *img = open_img("hidden/hidden.cue");
+	cd_qpos_t q;
+
+	CHECK(img != NULL);
+	if (!img)
+		return;
+	/* hidden audio: index 0, counting down 150 .. 1 to INDEX 01 */
+	cd_image_qpos(img, 0, &q);
+	CHECK(q.track == 1 && q.index == 0 && q.rel_frames == 150);
+	CHECK(q.ctrl_adr == 0x10);
+	cd_image_qpos(img, 149, &q);
+	CHECK(q.track == 1 && q.index == 0 && q.rel_frames == 1);
+	cd_image_qpos(img, 150, &q);
+	CHECK(q.track == 1 && q.index == 1 && q.rel_frames == 0);
+	cd_image_qpos(img, 449, &q);
+	CHECK(q.track == 1 && q.index == 1 && q.rel_frames == 299);
+	cd_image_qpos(img, 450, &q);
+	CHECK(q.track == 2 && q.index == 1 && q.rel_frames == 0);
+	cd_image_qpos(img, 825, &q);
+	CHECK(q.track == 0xAA && q.rel_frames == 0);
+	cd_image_close(img);
+
+	img = open_img("simple/simple.cue");
+	CHECK(img != NULL);
+	if (!img)
+		return;
+	cd_image_qpos(img, 16, &q);
+	CHECK(q.track == 1 && q.index == 1 && q.ctrl_adr == 0x14);
+	cd_image_qpos(img, 300, &q);	/* synthetic pregap of track 2 */
+	CHECK(q.track == 2 && q.index == 0 && q.rel_frames == 150);
+	CHECK(q.ctrl_adr == 0x10);
+	cd_image_close(img);
+}
+
 static void test_multi(void)
 {
 	cd_image_t *img = open_img("multi/multi.cue");	/* CRLF, 2 BINs */
@@ -319,6 +355,7 @@ int main(int argc, char **argv)
 	test_simple();
 	test_hidden();
 	test_multi();
+	test_qpos();
 	test_errors();
 #ifdef HAVE_LIBCHDR
 	test_chd();

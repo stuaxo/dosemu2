@@ -365,3 +365,299 @@ req:    resb 16
     self.assertEqual(t.group(3)[4:12], "00020000", results)
     self.assertEqual(t.group(3)[12:14], "60", results)
     self.assertNotEqual(int(t.group(4), 16) & 0xff, 0, results)
+
+
+def _run_audio(self, extra=""):
+    # Play on the hidden-track disc through the helper: the head must start
+    # in the pregap (index 0, relative time counting down), cross INDEX 01
+    # on the clock, freeze while paused, and stop by itself at the end of
+    # the range.  Works without sound; with it the PCM goes to the mixer.
+    out = _make_images(self)
+    hostdir = Path(self.imagedir) / "cdfiles"
+    hostdir.mkdir(exist_ok=True)
+
+    config = """\
+$_hdimage = "dXXXXs/c:hdtype1 +1"
+$_floppy_a = ""
+$_cdrom = "%s"
+$_hostfs_drives = "%s:c"
+""" % (out / "hidden" / "hidden.cue", hostdir) + extra
+
+    self.mkfile("testit.bat", """\
+c:\\cdaud
+rem end
+""", newline="\r\n")
+
+    self.mkcom_with_nasm("cdaud", r"""
+
+bits 16
+cpu 386
+
+org 100h
+
+section .text
+
+    push    cs
+    pop     ds
+    push    cs
+    pop     es
+
+    ; play HSG sector 0, 450 sectors (6 s), starting inside the pregap
+    mov     dx, 450
+    xor     bx, bx
+    call    play
+    mov     di, o_play
+    call    emit_ax
+
+    mov     di, o_q1
+    call    qchan
+
+    mov     bx, 56              ; ~3.1 s
+    call    wait_ticks
+    mov     di, o_q2
+    call    qchan
+
+    ; pause, then the head must not move
+    mov     ah, 05h
+    call    helper
+    mov     di, o_pause
+    call    emit_ax
+    mov     di, o_st1
+    call    astatus
+    mov     di, o_q3
+    call    qchan
+    mov     bx, 6
+    call    wait_ticks
+    mov     di, o_q4
+    call    qchan
+
+    mov     ah, 06h
+    call    helper
+    mov     di, o_resume
+    call    emit_ax
+
+    ; stop: the first 05h paused, so this one stops it
+    mov     ah, 05h
+    call    helper
+    mov     ah, 05h
+    call    helper
+    mov     di, o_st2
+    call    astatus
+
+    ; a short range stops by itself
+    mov     dx, 38
+    xor     bx, bx
+    call    play
+    mov     bx, 18
+    call    wait_ticks
+    mov     di, o_st3
+    call    astatus
+
+    mov     ah, 9
+    mov     dx, result
+    int     21h
+
+    mov     ax, 4c00h
+    int     21h
+
+; call the cdrom helper, AH = command, DS:SI -> buf, ES:DI -> req
+helper:
+    mov     si, buf
+    mov     di, req
+    mov     al, 40h
+    int     0e6h
+    mov     [lastax], ax
+    ret
+
+; play: bx = start sector, dx = count
+play:
+    push    di
+    mov     di, req
+    xor     ax, ax
+    mov     cx, 16
+    rep stosw
+    mov     byte [req+13], 0
+    mov     [req+14], bx
+    mov     [req+18], dx
+    pop     di
+    mov     ah, 04h
+    jmp     helper
+
+; Q-channel into the output at di: ax then the 11 byte reply
+qchan:
+    push    di
+    mov     di, buf
+    xor     ax, ax
+    mov     cx, 8
+    rep stosw
+    mov     ah, 13h
+    call    helper
+    pop     di
+    jmp     emit_all
+
+; audio status into the output at di
+astatus:
+    push    di
+    mov     di, buf
+    xor     ax, ax
+    mov     cx, 8
+    rep stosw
+    mov     ah, 14h
+    call    helper
+    pop     di
+    jmp     emit_all
+
+emit_all:
+    call    emit_ax
+    mov     si, buf
+    mov     cx, 11
+.next:
+    lodsb
+    call    hexbyte
+    loop    .next
+    ret
+
+emit_ax:
+    mov     ax, [lastax]
+    xchg    al, ah
+    call    hexbyte
+    xchg    al, ah
+    call    hexbyte
+    ret
+
+hexbyte:
+    push    ax
+    shr     al, 4
+    call    nib
+    pop     ax
+    and     al, 0fh
+nib:
+    add     al, '0'
+    cmp     al, '9'
+    jbe     .st
+    add     al, 7
+.st:
+    mov     [di], al
+    inc     di
+    ret
+
+; bx = number of BIOS ticks to wait
+wait_ticks:
+    push    es
+    mov     ax, 40h
+    mov     es, ax
+    mov     eax, [es:6ch]
+    movzx   ebx, bx
+    add     ebx, eax
+.w:
+    mov     eax, [es:6ch]
+    cmp     eax, ebx
+    jb      .w
+    pop     es
+    ret
+
+section .data
+
+lastax: dw 0
+
+result:
+    db "PLAY("
+o_play: db "XXXX"
+    db ") Q1("
+o_q1:   db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ") Q2("
+o_q2:   db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ") PAUSE("
+o_pause: db "XXXX"
+    db ") ST1("
+o_st1:  db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ") Q3("
+o_q3:   db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ") Q4("
+o_q4:   db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ") RESUME("
+o_resume: db "XXXX"
+    db ") ST2("
+o_st2:  db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ") ST3("
+o_st3:  db "XXXXXXXXXXXXXXXXXXXXXXXXXX"
+    db ")",13,10,'$'
+
+section .bss
+buf:    resb 32
+req:    resb 32
+""")
+
+    results = self.runDosemu("testit.bat", config=config, timeout=10)
+
+    names = ["PLAY", "Q1", "Q2", "PAUSE", "ST1", "Q3", "Q4", "RESUME",
+             "ST2", "ST3"]
+    pat = r" ".join(r"%s\(([0-9A-F]+)\)" % n for n in names)
+    self.assertRegex(results, pat)
+    v = dict(zip(names, re.search(pat, results).groups()))
+
+    def ax(s):
+        return int(s[:4], 16)
+
+    def blk(s):
+        return bytes.fromhex(s[4:])    # reply bytes 0..10 (byte 0 = request code)
+
+    # play accepted
+    self.assertEqual(ax(v["PLAY"]) & 0xff, 0, results)
+    # Q1: just started, still in the hidden pregap of track 1: index 0,
+    # busy flag in AH, relative time below 00:02:00 and absolute near 00:02
+    q1 = blk(v["Q1"])
+    self.assertEqual(ax(v["Q1"]) >> 8, 1, results)
+    self.assertEqual((q1[2], q1[3]), (1, 0), results)
+    self.assertLessEqual(q1[4] * 60 + q1[5], 2, results)
+    # Q2: well past INDEX 01 of track 1
+    q2 = blk(v["Q2"])
+    self.assertEqual((q2[2], q2[3]), (1, 1), results)
+    rel2 = (q2[4] * 60 + q2[5]) * 75 + q2[6]
+    self.assertTrue(0 < rel2 < 300, results)
+    # pause is accepted, and the head is frozen
+    self.assertEqual(ax(v["PAUSE"]) & 0xff, 0, results)
+    self.assertEqual(blk(v["ST1"])[1:3], b"\x01\x00", results)  # paused word
+    self.assertEqual(blk(v["Q3"])[8:11], blk(v["Q4"])[8:11], results)
+    # resume works from paused
+    self.assertEqual(ax(v["RESUME"]), 0x0100, results)
+    # after a stop the paused flag is clear
+    self.assertEqual(blk(v["ST2"])[1:3], b"\x00\x00", results)
+    # a short range finishes by itself: not busy any more
+    self.assertEqual(ax(v["ST3"]) >> 8, 0, results)
+
+
+def mscdex_image_audio(self):
+    _run_audio(self)
+
+
+def mscdex_image_sound(self):
+    # Same run with sound on and the output captured to a wav file: the
+    # first two seconds are the 220 Hz tone stored in the hidden pregap of
+    # track 1 (LBA 0..149), so a wrong sector, byte order or rate shows.
+    import struct
+    import wave
+
+    wav = Path(self.imagedir) / "cdaudio.wav"
+    wav.unlink(missing_ok=True)
+    _run_audio(self, """\
+$_sound = (on)
+$_sound_driver = "ao"
+$_wav_file = "%s"
+""" % wav)
+    if not wav.exists():
+        raise SkipTest("no sound output available (libao wav writer)")
+    w = wave.open(str(wav))
+    self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()),
+                     (2, 2, 44100))
+    n = w.getnframes()
+    data = struct.unpack("<%dh" % (n * 2), w.readframes(n))[0::2]
+    first = next((i for i, x in enumerate(data) if x), None)
+    self.assertIsNotNone(first, "only silence was written")
+
+    # zero crossings over 1.5 s of the pregap tone: 220 Hz -> 440 per s
+    seg = data[first:first + 66150]
+    self.assertEqual(len(seg), 66150)
+    zc = sum(1 for i in range(1, len(seg)) if (seg[i - 1] < 0) != (seg[i] < 0))
+    freq = zc / 2 / 1.5
+    self.assertAlmostEqual(freq, 220, delta=5, msg=str(freq))
