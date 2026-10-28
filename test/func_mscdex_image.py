@@ -193,3 +193,175 @@ buf2:   resb 2048
     self.assertEqual(t.group(5), "CD001", results)
     self.assertEqual(int(t.group(3), 16), 1, results)
     self.assertEqual(int(t.group(4), 16), 1, results)
+
+
+def mscdex_image_toc(self):
+    # Audio disc info and track info as the DOS driver gets them from the
+    # helper (INT E6h, AL=40h, AH=command, DS:SI -> request data).  The
+    # simple disc is a data track at 00:02:00 and an audio track whose
+    # INDEX 01 is at LBA 450, 00:08:00 on the disc, lead-out at 00:13:00.
+    out = _make_images(self)
+    hostdir = Path(self.imagedir) / "cdfiles"
+    hostdir.mkdir(exist_ok=True)
+
+    config = """\
+$_hdimage = "dXXXXs/c:hdtype1 +1"
+$_floppy_a = ""
+$_cdrom = "%s"
+$_hostfs_drives = "%s:c"
+""" % (out / "simple" / "simple.cue", hostdir)
+
+    self.mkfile("testit.bat", """\
+c:\\cdtoc
+rem end
+""", newline="\r\n")
+
+    self.mkcom_with_nasm("cdtoc", r"""
+
+bits 16
+cpu 386
+
+org 100h
+
+section .text
+
+    push    cs
+    pop     ds
+    push    cs
+    pop     es
+
+    ; audio disc info
+    mov     di, req
+    mov     al, 0
+    mov     cx, 8
+    rep stosb
+    mov     si, req
+    mov     al, 40h
+    mov     ah, 10h
+    int     0e6h
+    mov     si, req
+    mov     di, outd
+    call    hex8s
+
+    ; track 2 info
+    mov     di, req
+    mov     al, 0
+    mov     cx, 8
+    rep stosb
+    mov     byte [req+1], 2
+    mov     si, req
+    mov     al, 40h
+    mov     ah, 11h
+    int     0e6h
+    mov     si, req
+    mov     di, outt2
+    call    hex8s
+
+    ; track 1 info
+    mov     di, req
+    mov     al, 0
+    mov     cx, 8
+    rep stosb
+    mov     byte [req+1], 1
+    mov     si, req
+    mov     al, 40h
+    mov     ah, 11h
+    int     0e6h
+    mov     si, req
+    mov     di, outt1
+    call    hex8s
+
+    ; track 3 does not exist: AL must come back nonzero
+    mov     byte [req+1], 3
+    mov     si, req
+    mov     al, 40h
+    mov     ah, 11h
+    int     0e6h
+    mov     [ax3], ax
+    mov     ax, [ax3]
+    mov     di, out3
+    call    hex16
+
+    mov     ah, 9
+    mov     dx, result
+    int     21h
+
+    mov     ax, 4c00h
+    int     21h
+
+; si -> 8 bytes, di -> 16 chars of output
+hex8s:
+    mov     cx, 8
+.next:
+    lodsb
+    push    cx
+    mov     ah, al
+    shr     al, 4
+    call    nib
+    mov     al, ah
+    and     al, 0fh
+    call    nib
+    pop     cx
+    loop    .next
+    ret
+nib:
+    add     al, '0'
+    cmp     al, '9'
+    jbe     .st
+    add     al, 7
+.st:
+    mov     [di], al
+    inc     di
+    ret
+
+hex16:
+    mov     cx, 4
+.loop:
+    rol     ax, 4
+    push    ax
+    and     al, 0fh
+    call    nib
+    pop     ax
+    loop    .loop
+    ret
+
+section .data
+
+ax3:    dw 0
+
+result:
+    db "D("
+outd:
+    db "XXXXXXXXXXXXXXXX"
+    db ") T2("
+outt2:
+    db "XXXXXXXXXXXXXXXX"
+    db ") T1("
+outt1:
+    db "XXXXXXXXXXXXXXXX"
+    db ") T3("
+out3:
+    db "XXXX"
+    db ")",13,10,'$'
+
+section .bss
+req:    resb 16
+""")
+
+    results = self.runDosemu("testit.bat", config=config)
+
+    r = re.compile(r'D\(([0-9A-F]{16})\) T2\(([0-9A-F]{16})\) '
+                   r'T1\(([0-9A-F]{16})\) T3\(([0-9A-F]{4})\)')
+    self.assertRegex(results, r)
+    t = r.search(results)
+    # disc info: [0] untouched, lowest 1, highest 2, lead-out frame,
+    # second, minute, 0 -> 00:13:00
+    self.assertEqual(t.group(1), "000102000D000000", results)
+    # track 2: frame, second, minute, 0 at +2..5, control at +6
+    self.assertEqual(t.group(2)[:2], "00", results)
+    self.assertEqual(t.group(2)[4:12], "00080000", results)
+    self.assertEqual(t.group(2)[12:14], "20", results)
+    # track 1 is data: 00:02:00, control 0x60
+    self.assertEqual(t.group(3)[4:12], "00020000", results)
+    self.assertEqual(t.group(3)[12:14], "60", results)
+    self.assertNotEqual(int(t.group(4), 16) & 0xff, 0, results)
