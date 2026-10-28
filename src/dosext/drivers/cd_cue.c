@@ -31,9 +31,9 @@ typedef struct {
 } cue_trk_t;
 
 typedef struct {
-	cue_file_t files[CD_MAX_TRACKS];
+	cue_file_t files[CDI_MAX_TRACKS];
 	int        nfiles;
-	cue_trk_t  trk[CD_MAX_TRACKS];
+	cue_trk_t  trk[CDI_MAX_TRACKS];
 } cue_priv_t;
 
 static int cue_read_frame(cd_image_t *img, const cd_track_t *t, uint32_t lba,
@@ -218,7 +218,7 @@ static int cue_file(cue_parse_t *c, char **s)
 		       c->path, c->lineno);
 		return -1;
 	}
-	if (p->nfiles >= CD_MAX_TRACKS)
+	if (p->nfiles >= CDI_MAX_TRACKS)
 		return -1;
 	if (p->nfiles)
 		finish_file(&p->files[p->nfiles - 1], c->synth_in_file);
@@ -252,7 +252,7 @@ static int cue_track(cue_parse_t *c, char **s)
 		return -1;
 	}
 	if (!a || !b || sscanf(a, "%u", &num) != 1 || !p->nfiles ||
-			c->cur + 1 >= CD_MAX_TRACKS) {
+			c->cur + 1 >= CDI_MAX_TRACKS) {
 		cd_log("%s:%d: bad TRACK\n", c->path, c->lineno);
 		return -1;
 	}
