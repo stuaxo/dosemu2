@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate CD image fixtures (BIN/CUE).
+"""Generate CD image fixtures (BIN/CUE and, if chdman exists, CHD).
 
 Usage: make_images.py OUTDIR
 
@@ -8,7 +8,8 @@ Creates under OUTDIR:
   hidden/hidden.{bin,cue}   hidden 220Hz pregap audio in the BIN (INDEX 00)
   multi/{data,audio}.bin, multi.cue   one BIN per track
 
-Audio in BIN files is raw little-endian 16-bit stereo, 44100 Hz.  The data track is a real
+Audio in BIN files is raw little-endian 16-bit stereo, 44100 Hz (CHD stores
+it big-endian; chdman does the conversion).  The data track is a real
 ISO 9660 image (genisoimage/xorriso) wrapped as MODE1/2352, so sector 16
 holds the 'CD001' volume descriptor; without a tool it falls back to a
 0xDA pattern.
@@ -112,6 +113,18 @@ def write(path, data):
         f.write(data)
 
 
+def to_chd(cue, chd):
+    if shutil.which('chdman'):
+        r = subprocess.run(['chdman', 'createcd', '-f', '-i', cue, '-o', chd],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if r.returncode:
+            print('WARN: chdman failed on', cue)
+            return False
+        return True
+    print('SKIP: chdman not found, no .chd for', cue)
+    return False
+
+
 def main(out):
     work = tempfile.mkdtemp()
     data = data_track(work)
@@ -124,6 +137,7 @@ def main(out):
           b'FILE "simple.bin" BINARY\n'
           b'  TRACK 01 MODE1/2352\n    INDEX 01 00:00:00\n'
           b'  TRACK 02 AUDIO\n    PREGAP 00:02:00\n    INDEX 01 00:04:00\n')
+    to_chd(os.path.join(d, 'simple.cue'), os.path.join(d, 'simple.chd'))
 
     d = os.path.join(out, 'hidden')
     os.makedirs(d, exist_ok=True)
@@ -133,6 +147,7 @@ def main(out):
           b'FILE "hidden.bin" BINARY\n'
           b'  TRACK 01 AUDIO\n    INDEX 00 00:00:00\n    INDEX 01 00:02:00\n'
           b'  TRACK 02 AUDIO\n    INDEX 00 00:06:00\n    INDEX 01 00:06:00\n')
+    to_chd(os.path.join(d, 'hidden.cue'), os.path.join(d, 'hidden.chd'))
 
     d = os.path.join(out, 'multi')
     os.makedirs(d, exist_ok=True)
