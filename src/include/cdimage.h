@@ -84,6 +84,17 @@ int cdimage_read_cooked(cdimage_t * img, uint32_t lba, uint8_t * out2048);
 int cdimage_read_audio(cdimage_t * img, uint32_t lba,
                        int16_t * pcm /* 588*2 */ );
 
+/* Sub-channel Q data for the head at lba. */
+typedef struct {
+  uint8_t ctrl_adr;             /* ADR << 4 | control (0x10/0x14) */
+  uint8_t track;                /* 1..n, or 0xAA at/after the lead-out */
+  uint8_t index;                /* 0 inside the pregap, 1 from INDEX 01 on */
+  uint32_t rel_frames;          /* distance to INDEX 01: counts down through
+                                 * the pregap to 0, then up through the track */
+  uint32_t abs_lba;
+} cdimage_qpos_t;
+void cdimage_qpos(const cdimage_t * img, uint32_t lba, cdimage_qpos_t * q);
+
 /* The built-in BIN/CUE format */
 extern const struct cdimage_format_ops cdimage_cue_format;
 
