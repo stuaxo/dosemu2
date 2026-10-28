@@ -9,6 +9,7 @@
  * cdrom_helper(): AL=0 success, AL=1 with an MSCDEX error code in AH.
  */
 #include <errno.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -24,6 +25,18 @@
 #define ERR_SEEK	0x08
 #define ERR_GENERAL	0x0C
 #define ERR_READ	0x0F
+
+static pthread_mutex_t img_mtx = PTHREAD_MUTEX_INITIALIZER;
+
+void cdrom_img_lock(void)
+{
+	pthread_mutex_lock(&img_mtx);
+}
+
+void cdrom_img_unlock(void)
+{
+	pthread_mutex_unlock(&img_mtx);
+}
 
 static cd_image_t *cd_img[NDRIVES];
 static bool cd_img_tried[NDRIVES];
@@ -92,6 +105,20 @@ static void put_msf(unsigned char *p, uint32_t lba)
 	p[3] = 0;
 }
 
+static void audio_stop_state(void)
+{
+	audio_status.paused_bit = 0;
+	audio_status.last_StartSector = 0;
+	audio_status.last_EndSector = 0;
+}
+
+/* AH=1 tells MSCDEX that audio is playing */
+static void set_busy(int idx)
+{
+	if (cda_state(idx) == CDA_PLAY)
+		HI(ax) = 1;
+}
+
 static void fail(int code)
 {
 	HI(ax) = code;
@@ -127,7 +154,12 @@ static void do_read_long(cd_image_t *img, unsigned char *req_buf,
 		return;
 	}
 	for (i = 0; i < n; i++) {
-		if (cd_image_read_cooked(img, lba + i, sec)) {
+		int err;
+
+		cdrom_img_lock();
+		err = cd_image_read_cooked(img, lba + i, sec);
+		cdrom_img_unlock();
+		if (err) {
 			C_printf("CDROM: image read of sector %#x failed\n",
 				 lba + i);
 			fail(ERR_READ);
@@ -140,6 +172,181 @@ static void do_read_long(cd_image_t *img, unsigned char *req_buf,
 			memcpy(transfer_buf + i * CD_FRAME_COOKED, sec,
 			       CD_FRAME_COOKED);
 	}
+	LO(ax) = 0;
+}
+
+static void img_play(int idx, cd_image_t *img)
+{
+	unsigned char *req_buf = SEG_ADR((unsigned char *), es, di);
+	uint32_t sec150, count, start, end;
+
+	if (*CALC_PTR(req_buf, MSCD_PLAY_ADRESSING, u_char) == 1) {
+		sec150 = *CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 2,
+				   u_char) * 60 * 75 +
+			 *CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 1,
+				   u_char) * 75 +
+			 *CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 0,
+				   u_char);
+	} else {
+		sec150 = *CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR,
+				   u_int) + 150;
+	}
+	count = *CALC_PTR(req_buf, MSCD_PLAY_NUMSECTORS, u_int);
+	audio_status.last_StartSector = sec150;
+	audio_status.last_EndSector = sec150 + count;
+	audio_status.paused_bit = 0;
+	/* A start inside the pregap (even LBA 0 of a hidden track)
+	 * is valid: do not clamp to INDEX 01. */
+	start = sec150 > CD_LEADIN ? sec150 - CD_LEADIN : 0;
+	C_printf("CDROM: image play lba %u count %u\n", start, count);
+	if (start >= img->leadout_lba) {
+		fail(ERR_SEEK);
+		return;
+	}
+	end = count > img->leadout_lba - start ?
+		img->leadout_lba : start + count;
+	cda_play(idx, img, start, end);
+	LO(ax) = 0;
+}
+
+static void img_pause(int idx)
+{
+	LO(ax) = 0;
+	if (cda_state(idx) == CDA_PLAY) {
+		audio_status.last_StartSector = cda_position(idx) + CD_LEADIN;
+		cda_pause(idx);
+		audio_status.paused_bit = 1;
+	} else {
+		cda_stop(idx);
+		audio_stop_state();
+	}
+}
+
+static void img_resume(int idx)
+{
+	LO(ax) = 0;
+	if (audio_status.paused_bit && cda_resume(idx)) {
+		audio_status.paused_bit = 0;
+		HI(ax) = 1;
+	} else {
+		LO(ax) = 1;
+	}
+}
+
+static void img_head_location(int idx)
+{
+	uint32_t lba = cda_position(idx);
+	unsigned char *req_buf = SEG_ADR((unsigned char *), ds, si);
+
+	LWORD(eax) = 0;
+	set_busy(idx);
+	if (*CALC_PTR(req_buf, MSCD_LOCH_ADRESSING, u_char) == 0)
+		*CALC_PTR(req_buf, MSCD_LOCH_LOCATION, u_int) = lba;
+	else
+		put_msf(req_buf + MSCD_LOCH_LOCATION, lba);
+}
+
+static void img_channel_control(int idx)
+{
+	unsigned char *req_buf = SEG_ADR((unsigned char *), ds, si);
+	uint8_t vol[2], out[2];
+
+	LWORD(eax) = 0;
+	set_busy(idx);
+	audio_status.volume0 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME0, u_char);
+	audio_status.volume1 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME1, u_char);
+	audio_status.volume2 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME2, u_char);
+	audio_status.volume3 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME3, u_char);
+	audio_status.outchan0 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME0 - 1, u_char);
+	audio_status.outchan1 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME1 - 1, u_char);
+	audio_status.outchan2 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME2 - 1, u_char);
+	audio_status.outchan3 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME3 - 1, u_char);
+	vol[0] = audio_status.volume0;
+	vol[1] = audio_status.volume1;
+	out[0] = audio_status.outchan0;
+	out[1] = audio_status.outchan1;
+	cda_set_volume(idx, vol, out);
+}
+
+static void img_qchannel(int idx, cd_image_t *img)
+{
+	unsigned char *req_buf = SEG_ADR((unsigned char *), ds, si);
+	cd_qpos_t q;
+	uint8_t m, s, f;
+
+	LWORD(eax) = 0;
+	set_busy(idx);
+	cd_image_qpos(img, cda_position(idx), &q);
+	*CALC_PTR(req_buf, MSCD_QCHAN_CTRL, u_char) = q.ctrl_adr;
+	*CALC_PTR(req_buf, MSCD_QCHAN_TNO, u_char) = q.track;
+	*CALC_PTR(req_buf, MSCD_QCHAN_IND, u_char) = q.index;
+	/* relative time is not offset by the 150 frame lead-in;
+	 * in the pregap it counts down to INDEX 01 */
+	m = q.rel_frames / (60 * 75);
+	s = (q.rel_frames / 75) % 60;
+	f = q.rel_frames % 75;
+	*CALC_PTR(req_buf, MSCD_QCHAN_MIN, u_char) = m;
+	*CALC_PTR(req_buf, MSCD_QCHAN_SEC, u_char) = s;
+	*CALC_PTR(req_buf, MSCD_QCHAN_FRM, u_char) = f;
+	*CALC_PTR(req_buf, MSCD_QCHAN_ZERO, u_char) = 0;
+	cd_lba_to_msf(q.abs_lba, &m, &s, &f);
+	*CALC_PTR(req_buf, MSCD_QCHAN_AMIN, u_char) = m;
+	*CALC_PTR(req_buf, MSCD_QCHAN_ASEC, u_char) = s;
+	*CALC_PTR(req_buf, MSCD_QCHAN_AFRM, u_char) = f;
+}
+
+static void img_audio_status(int idx)
+{
+	unsigned char *req_buf = SEG_ADR((unsigned char *), ds, si);
+
+	LWORD(eax) = 0;
+	set_busy(idx);
+	*CALC_PTR(req_buf, MSCD_AUDSTAT_PAUSED, u_short) =
+		audio_status.paused_bit;
+	*CALC_PTR(req_buf, MSCD_AUDSTAT_START, u_int) =
+		audio_status.last_StartSector;
+	*CALC_PTR(req_buf, MSCD_AUDSTAT_END, u_int) =
+		audio_status.last_EndSector;
+}
+
+static void img_channel_info(int idx)
+{
+	unsigned char *req_buf = SEG_ADR((unsigned char *), ds, si);
+
+	LWORD(eax) = 0;
+	set_busy(idx);
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME0, u_char) = audio_status.volume0;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME1, u_char) = audio_status.volume1;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME2, u_char) = audio_status.volume2;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME3, u_char) = audio_status.volume3;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME0 - 1, u_char) = audio_status.outchan0;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME1 - 1, u_char) = audio_status.outchan1;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME2 - 1, u_char) = audio_status.outchan2;
+	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME3 - 1, u_char) = audio_status.outchan3;
+}
+
+static void img_track_info(cd_image_t *img)
+{
+	unsigned char *req_buf = SEG_ADR((unsigned char *), ds, si);
+	unsigned trk = *CALC_PTR(req_buf, MSCD_TRACKINFO_TRACKNUM, u_char);
+	int ctrl;
+	uint32_t lba;
+
+	C_printf("CDROM: image track info, track %u\n", trk);
+	if (trk == 0xAA) {		/* lead-out */
+		lba = img->leadout_lba;
+		ctrl = img->tracks[img->ntracks - 1].is_audio ? 0 : 4;
+	} else if (trk >= 1 && trk <= (unsigned)img->ntracks) {
+		lba = img->tracks[trk - 1].index1_lba;
+		ctrl = img->tracks[trk - 1].is_audio ? 0 : 4;
+	} else {
+		/* MSCDEX reads beyond the last track; not an error to log */
+		LO(ax) = 1;
+		return;
+	}
+	put_msf(req_buf + MSCD_TRACKINFO_TRACKPOS, lba);
+	*CALC_PTR(req_buf, MSCD_TRACKINFO_CTRL, u_char) =
+		ctrl << 4 | 0x20;	/* as cdrom.c does for devices */
 	LO(ax) = 0;
 }
 
@@ -164,6 +371,8 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
 		audio_status.outchan1 = 1;
 		audio_status.outchan2 = 2;
 		audio_status.outchan3 = 3;
+		cda_stop(idx);
+		audio_stop_state();
 		LO(ax) = 0;
 		break;
 	case 0x02:			/* read long */
@@ -180,12 +389,15 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
 		HI(ax) = 0;
 		LO(ax) = 0;
 		LO(bx) = audio_status.media_changed;
+		if (!LO(bx))
+			set_busy(idx);
 		audio_status.media_changed = 0;
 		break;
 	case 0x0A:			/* device status */
 		HI(ax) = 0;
 		LO(ax) = 0;
 		LWORD(ebx) = audio_status.status;
+		set_busy(idx);
 		break;
 	case 0x0B:			/* drive reset */
 	case 0x0D:			/* eject: an image cannot be ejected */
@@ -199,7 +411,31 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
 			audio_status.status |= 0x2;
 		LO(ax) = 0;
 		break;
-	case 0x10:			/* audio disk info */
+	case 0x04:			/* play */
+		img_play(idx, img);
+		break;
+	case 0x05:			/* pause (stop) audio */
+		img_pause(idx);
+		break;
+	case 0x06:			/* resume audio */
+		img_resume(idx);
+		break;
+	case 0x07:			/* location of head */
+		img_head_location(idx);
+		break;
+	case 0x0F:			/* audio channel control */
+		img_channel_control(idx);
+		break;
+	case 0x13:			/* Q-channel */
+		img_qchannel(idx, img);
+		break;
+	case 0x14:			/* audio status */
+		img_audio_status(idx);
+		break;
+	case 0x15:			/* get audio channel information */
+		img_channel_info(idx);
+		break;
+	case 0x10:			/* audio disc info */
 		LWORD(eax) = 0;
 		req_buf = SEG_ADR((unsigned char *), ds, si);
 		*CALC_PTR(req_buf, MSCD_DISKINFO_LTN, u_char) =
@@ -208,31 +444,9 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
 			img->tracks[img->ntracks - 1].num;
 		put_msf(req_buf + MSCD_DISKINFO_LEADOUT, img->leadout_lba);
 		break;
-	case 0x11: {			/* track info */
-		int ctrl;
-		uint32_t lba;
-		unsigned trk;
-
-		req_buf = SEG_ADR((unsigned char *), ds, si);
-		trk = *CALC_PTR(req_buf, MSCD_TRACKINFO_TRACKNUM, u_char);
-		C_printf("CDROM: image track info, track %u\n", trk);
-		if (trk == 0xAA) {		/* lead-out */
-			lba = img->leadout_lba;
-			ctrl = img->tracks[img->ntracks - 1].is_audio ? 0 : 4;
-		} else if (trk >= 1 && trk <= (unsigned)img->ntracks) {
-			lba = img->tracks[trk - 1].index1_lba;
-			ctrl = img->tracks[trk - 1].is_audio ? 0 : 4;
-		} else {
-			/* MSCDEX reads beyond the last track; not an error to log */
-			LO(ax) = 1;
-			break;
-		}
-		put_msf(req_buf + MSCD_TRACKINFO_TRACKPOS, lba);
-		*CALC_PTR(req_buf, MSCD_TRACKINFO_CTRL, u_char) =
-			ctrl << 4 | 0x20;	/* as cdrom.c does for devices */
-		LO(ax) = 0;
+	case 0x11:			/* track info */
+		img_track_info(img);
 		break;
-	}
 	case 0x12:			/* volume size */
 		req_buf = SEG_ADR((unsigned char *), ds, si);
 		*CALC_PTR(req_buf, MSCD_GETVOLUMESIZE_SIZE, int) =
@@ -240,9 +454,7 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
 		LO(ax) = 0;
 		break;
 	default:
-		/* audio, TOC and Q-channel requests are added separately */
-		C_printf("CDROM: image: request %#x not supported yet\n",
-			 HI(ax));
+		C_printf("CDROM: image: unknown request %#x\n", HI(ax));
 		fail(ERR_GENERAL);
 		break;
 	}
@@ -253,6 +465,7 @@ void cdrom_img_done(void)
 {
 	int i;
 
+	cda_done();
 	for (i = 0; i < NDRIVES; i++) {
 		cd_image_close(cd_img[i]);
 		cd_img[i] = NULL;

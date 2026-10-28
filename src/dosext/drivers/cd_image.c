@@ -66,6 +66,34 @@ int cd_image_read_audio(cd_image_t *img, uint32_t lba, int16_t *pcm)
 	return 0;
 }
 
+void cd_image_qpos(const cd_image_t *img, uint32_t lba, cd_qpos_t *q)
+{
+	const cd_track_t *t = cd_image_find_track(img, lba);
+
+	q->abs_lba = lba;
+	if (!t) {
+		const cd_track_t *last = &img->tracks[img->ntracks - 1];
+
+		if (lba >= img->leadout_lba) {
+			q->track = 0xAA;
+			q->index = 1;
+			q->rel_frames = lba - img->leadout_lba;
+			q->ctrl_adr = 0x10 | (last->is_audio ? 0 : 4);
+			return;
+		}
+		t = &img->tracks[0];	/* before the first INDEX 00 */
+	}
+	q->track = t->num;
+	q->ctrl_adr = 0x10 | (t->is_audio ? 0 : 4);
+	if (lba < t->index1_lba) {
+		q->index = 0;
+		q->rel_frames = t->index1_lba - lba;
+	} else {
+		q->index = 1;
+		q->rel_frames = lba - t->index1_lba;
+	}
+}
+
 uint32_t cd_msf_to_lba(uint8_t m, uint8_t s, uint8_t f)
 {
 	uint32_t n = ((uint32_t)m * 60 + s) * 75 + f;

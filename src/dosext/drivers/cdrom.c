@@ -163,10 +163,6 @@ static void cdrom_reset(void)
 	ioctl(cdrom_fd, CDROMRESET, NULL);
 }
 
-#define MSCD_AUDCHAN_VOLUME0       2
-#define MSCD_AUDCHAN_VOLUME1       4
-#define MSCD_AUDCHAN_VOLUME2       6
-#define MSCD_AUDCHAN_VOLUME3       8
 
 /*
  * dosemu2 sandboxes itself with landlock before it opens anything, so the
