@@ -196,6 +196,10 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
     IndexCd = (int) ((HI(ax) & 0xC0) >> 6);
     HI(ax) = HI(ax) & 0x3F;
 
+    if (cdrom_img_request(IndexCd, path_cdrom, req_buf, transfer_buf,
+			  dos_transfer_buf))
+	return;
+
     if (HI(ax) != 1 && cdrom_fd < 0) {
 	if (!cdu33a) {
 	    LO(ax) = 1;		/* not initialized */
@@ -782,6 +786,8 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 void cdrom_done(void)
 {
     int i;
+
+    cdrom_img_done();
 
     for (i = 0; i < ARRAY_SIZE(CdromFd); i++) {
         if (CdromFd[i] != -1) {

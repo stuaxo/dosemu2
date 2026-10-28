@@ -74,4 +74,12 @@ static inline void mscd_frames_to_msf(unsigned int frames, unsigned char *m,
     *f = (frames % (60 * 75)) % 75;
 }
 
+/*
+ * Image-backed drives (cdrom_img.c).  Returns 1 if the drive is backed by a
+ * cd_image and the request was handled, 0 if cdrom.c should handle it.
+ */
+int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
+		      unsigned char *transfer_buf, unsigned int dos_transfer_buf);
+void cdrom_img_done(void);
+
 #endif /* CDROM_PRIV_H */
