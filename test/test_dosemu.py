@@ -72,6 +72,7 @@ from func_misc import (create_new_psp, passing_dos_errorlevel_back, passing_envi
 from func_mfs_directory import mfs_directory_common, mfs_get_current_directory
 from func_mfs_read_write import mfs_file_read, mfs_file_write
 from func_mscdex_iso import mscdex_iso_files, mscdex_nul_redirect_iso
+from func_mscdex_image import mscdex_image
 from func_mscdex_stub import mscdex_stub
 from func_kernel_cmdline import kernel_cmdline
 from func_findfile import (mfs_findfile_ufs_lfn, mfs_findfile_ufs_sfn,
@@ -122,6 +123,10 @@ class OurTestCase(BaseTestCase):
     def test_mscdex_nul_redirect_iso(self):
         """Redirect to nul: from a CD drive served by SHSUCDX"""
         mscdex_nul_redirect_iso(self)
+
+    def test_mscdex_image(self):
+        """MSCDEX reads sectors from a BIN/CUE image"""
+        mscdex_image(self)
 
     def test_kernel_cmdline(self):
         """Kernel command line selects config file"""
