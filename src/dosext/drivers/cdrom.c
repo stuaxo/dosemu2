@@ -303,9 +303,9 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 		*CALC_PTR(req_buf, MSCD_READ_STARTSECTOR + 1, u_char);
 	    cdrom_msf.cdmsf_frame0 =
 		*CALC_PTR(req_buf, MSCD_READ_STARTSECTOR + 0, u_char);
-	    Sector =
-		cdrom_msf.cdmsf_min0 * 60 * 75 +
-		cdrom_msf.cdmsf_sec0 * 75 + cdrom_msf.cdmsf_frame0 - 150;
+	    Sector = mscd_msf_to_frames(cdrom_msf.cdmsf_min0,
+					cdrom_msf.cdmsf_sec0,
+					cdrom_msf.cdmsf_frame0) - 150;
 	} else {
 	    Sector = *CALC_PTR(req_buf, MSCD_READ_STARTSECTOR, u_int);
 	}
@@ -388,23 +388,22 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 		*CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 1, u_char);
 	    cdrom_msf.cdmsf_frame0 =
 		*CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 0, u_char);
-	    Sector_plus_150 =
-		cdrom_msf.cdmsf_min0 * 60 * 75 +
-		cdrom_msf.cdmsf_sec0 * 75 + cdrom_msf.cdmsf_frame0;
+	    Sector_plus_150 = mscd_msf_to_frames(cdrom_msf.cdmsf_min0,
+						 cdrom_msf.cdmsf_sec0,
+						 cdrom_msf.cdmsf_frame0);
 	    audio_status.last_StartSector = Sector_plus_150;
 	} else {
 	    Sector_plus_150 =
 		*CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR, u_int) + 150;
-	    cdrom_msf.cdmsf_min0 = (Sector_plus_150 / (60 * 75));
-	    cdrom_msf.cdmsf_sec0 = (Sector_plus_150 % (60 * 75)) / 75;
-	    cdrom_msf.cdmsf_frame0 = (Sector_plus_150 % (60 * 75)) % 75;
+	    mscd_frames_to_msf(Sector_plus_150, &cdrom_msf.cdmsf_min0,
+			       &cdrom_msf.cdmsf_sec0,
+			       &cdrom_msf.cdmsf_frame0);
 	    audio_status.last_StartSector = Sector_plus_150;
 	}
 	Sector_plus_150 +=
 	    *CALC_PTR(req_buf, MSCD_PLAY_NUMSECTORS, u_int);
-	cdrom_msf.cdmsf_min1 = (Sector_plus_150 / (60 * 75));
-	cdrom_msf.cdmsf_sec1 = (Sector_plus_150 % (60 * 75)) / 75;
-	cdrom_msf.cdmsf_frame1 = (Sector_plus_150 % (60 * 75)) % 75;
+	mscd_frames_to_msf(Sector_plus_150, &cdrom_msf.cdmsf_min1,
+			   &cdrom_msf.cdmsf_sec1, &cdrom_msf.cdmsf_frame1);
 
 	audio_status.last_EndSector = Sector_plus_150;
 	audio_status.paused_bit = 0;
@@ -422,10 +421,10 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	LO(ax) = 0;
 	if (ioctl(cdrom_fd, CDROMSUBCHNL, &cdrom_subchnl) == 0) {
 	    if (cdrom_subchnl.cdsc_audiostatus == CDROM_AUDIO_PLAY) {
-		audio_status.last_StartSector =
-		    cdrom_subchnl.cdsc_absaddr.msf.minute * 60 * 75
-		    + cdrom_subchnl.cdsc_absaddr.msf.second * 75
-		    + cdrom_subchnl.cdsc_absaddr.msf.frame;
+		audio_status.last_StartSector = mscd_msf_to_frames(
+		    cdrom_subchnl.cdsc_absaddr.msf.minute,
+		    cdrom_subchnl.cdsc_absaddr.msf.second,
+		    cdrom_subchnl.cdsc_absaddr.msf.frame);
 		ioctl(cdrom_fd, CDROMPAUSE, NULL);
 		audio_status.paused_bit = 1;
 	    } else {
@@ -466,9 +465,10 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	req_buf = SEG_ADR((unsigned char *), ds, si);
 	if (*CALC_PTR(req_buf, MSCD_LOCH_ADRESSING, u_char) == 0) {
 	    *CALC_PTR(req_buf, MSCD_LOCH_LOCATION, u_int)
-		= cdrom_subchnl.cdsc_absaddr.msf.minute * 60 * 75
-		+ cdrom_subchnl.cdsc_absaddr.msf.second * 75
-		+ cdrom_subchnl.cdsc_absaddr.msf.frame - 150;
+		= mscd_msf_to_frames(cdrom_subchnl.cdsc_absaddr.msf.minute,
+				     cdrom_subchnl.cdsc_absaddr.msf.second,
+				     cdrom_subchnl.cdsc_absaddr.msf.frame)
+		- 150;
 	} else {		/* red book addressing */
 	    *CALC_PTR(req_buf, MSCD_LOCH_LOCATION + 3, u_char) = 0;
 	    *CALC_PTR(req_buf, MSCD_LOCH_LOCATION + 2, u_char) =

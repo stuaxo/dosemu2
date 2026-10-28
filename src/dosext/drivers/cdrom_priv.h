@@ -59,4 +59,19 @@ extern struct audio_status audio_status;
 #define MSCD_CTRL_VOLUME2          6
 #define MSCD_CTRL_VOLUME3          8
 
+/* Red Book addressing: 75 frames to the second, 60 seconds to the minute. */
+static inline unsigned int mscd_msf_to_frames(unsigned int m, unsigned int s,
+					      unsigned int f)
+{
+    return (m * 60 + s) * 75 + f;
+}
+
+static inline void mscd_frames_to_msf(unsigned int frames, unsigned char *m,
+				      unsigned char *s, unsigned char *f)
+{
+    *m = frames / (60 * 75);
+    *s = (frames % (60 * 75)) / 75;
+    *f = (frames % (60 * 75)) % 75;
+}
+
 #endif /* CDROM_PRIV_H */
