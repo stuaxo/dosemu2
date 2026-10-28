@@ -19,7 +19,7 @@
 #define CD_FRAME_COOKED	2048
 #define CD_AUDIO_FRAMES	588		/* stereo sample pairs per sector */
 #define CD_LEADIN	150		/* LBA 0 == MSF 00:02:00 */
-#define CD_MAX_TRACKS	99
+#define CDI_MAX_TRACKS	99
 
 typedef struct {
 	uint8_t  num;			/* 1-based track number */
@@ -38,7 +38,7 @@ typedef struct cd_image cd_image_t;
 
 struct cd_image {
 	int        ntracks;
-	cd_track_t tracks[CD_MAX_TRACKS];
+	cd_track_t tracks[CDI_MAX_TRACKS];
 	uint32_t   leadout_lba;
 	bool       audio_big_endian;	/* byte order of stored CDDA samples */
 
@@ -73,6 +73,8 @@ void cd_lba_to_msf(uint32_t lba, uint8_t *m, uint8_t *s, uint8_t *f);
 cd_image_t *cd_cue_open(const char *path);
 #ifdef HAVE_LIBCHDR
 cd_image_t *cd_chd_open(const char *path);
+/* number of hunk decompressions so far (for tests) */
+unsigned cd_chd_hunk_reads(const cd_image_t *img);
 #endif
 
 #ifdef CD_IMAGE_STANDALONE

@@ -413,6 +413,15 @@ AC_ARG_WITH(rpath,
 AC_SUBST(SO_LDFLAGS)
 
 AC_CHECK_LIB(m, pow)
+
+AC_ARG_WITH(libchdr, [AS_HELP_STRING([--without-libchdr],
+  [do not build CHD CD image support])],, with_libchdr=check)
+AS_IF([test "x$with_libchdr" != "xno"], [
+  AC_CHECK_HEADER([libchdr/chd.h],
+    [AC_CHECK_LIB([chdr], [chd_open])],
+    [AS_IF([test "x$with_libchdr" = "xyes"],
+      [AC_MSG_ERROR([libchdr requested but libchdr/chd.h not found])])])
+])
 AC_CHECK_DECLS([exp10f],,, [[#include <math.h>]])
 
 AC_ARG_ENABLE(dlplugins,
