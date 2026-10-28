@@ -668,9 +668,9 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	req_buf = SEG_ADR((unsigned char *), ds, si);
 #ifdef __linux__
 	*CALC_PTR(req_buf, MSCD_GETVOLUMESIZE_SIZE, int) =
-	    cdrom_tocentry.cdte_addr.msf.minute * 60 * 75 +
-	    cdrom_tocentry.cdte_addr.msf.second * 60 +
-	    cdrom_tocentry.cdte_addr.msf.frame;
+	    mscd_msf_to_frames(cdrom_tocentry.cdte_addr.msf.minute,
+			       cdrom_tocentry.cdte_addr.msf.second,
+			       cdrom_tocentry.cdte_addr.msf.frame);
 #endif
 	LO(ax) = 0;
 	break;
