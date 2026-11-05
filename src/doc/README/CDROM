@@ -178,7 +178,11 @@ image instead of a Linux device. BIN/CUE is built in: the entry is the CUE
 sheet, a file that ends in .cue or starts like one (single or per-track
 BINs, INDEX 00/01, PREGAP and POSTGAP are honoured).
 The image answers what MSCDEX asks the driver for: sector reads (the
-data track, as 2048 byte sectors) and the table of contents.
+data track, as 2048 byte sectors), the table of contents, the Q-channel and
+CD audio, which is played through the dosemu2 mixer. A track
+that begins with hidden audio before its INDEX 01 can be played from the
+pregap, and the Q-channel relative time counts down through it as on a
+real disc.
 </para>
 
 <screen>
