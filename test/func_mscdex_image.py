@@ -416,8 +416,14 @@ def mscdex_image_files_multi(self):
     _cd_files(self, "multi/multi.cue", "BIN/CUE, one BIN per track")
 
 
+def mscdex_image_files_chd(self):
+    if not shutil.which("chdman"):
+        raise SkipTest("needs chdman to build a CHD")
+    _cd_files(self, "simple/simple.chd", "CHD")
+
+
 def mscdex_image_real(self):
-    # Optional: point DOSEMU_TEST_CD_IMAGES at one or more real .cue
+    # Optional: point DOSEMU_TEST_CD_IMAGES at one or more real .cue/.chd
     # files (space separated).  For each, SHSUCDX must mount it and DIR of
     # the root must list something.  The images stay outside the
     # repository.  With DOSEMU_TEST_CD_COPY=DIR\\FILE (a path in the

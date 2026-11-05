@@ -2,9 +2,9 @@
  * drivers/cdrom_img.c
  *
  * MSCDEX device-driver requests for CD-ROM drives that are backed by an
- * image file (BIN/CUE, see cd_image.h) instead of a Linux device.
+ * image file (BIN/CUE or CHD, see cd_image.h) instead of a Linux device.
  * cdrom.c calls cdrom_img_request() first; if the configured path is a
- * .cue the request is handled here, otherwise cdrom.c carries on with
+ * .cue/.chd the request is handled here, otherwise cdrom.c carries on with
  * the ioctl based code.  Register and request-buffer conventions follow
  * cdrom_helper(): AL=0 success, AL=1 with an MSCDEX error code in AH.
  */
@@ -32,7 +32,7 @@ static bool path_is_image(const char *path)
 {
 	const char *ext = strrchr(path, '.');
 
-	return ext && !strcasecmp(ext, ".cue");
+	return ext && (!strcasecmp(ext, ".cue") || !strcasecmp(ext, ".chd"));
 }
 
 /*
