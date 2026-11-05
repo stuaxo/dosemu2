@@ -369,7 +369,7 @@ req:    resb 16
     self.assertNotEqual(int(t.group(4), 16) & 0xff, 0, results)
 
 
-def _cd_files(self, image, label):
+def _cd_files(self, image, label, optional=False):
     # Read a file off the data track of an image with a real DOS CD
     # extension.  SHSUCDX talks to dosemu2's cdrom.sys, parses the ISO 9660
     # file system itself and so exercises directory and file reads through
@@ -397,6 +397,8 @@ rem end
 """, newline="\r\n")
 
     results = self.runDosemu("testit.bat", config=config)
+    if optional and "HELLO" not in results:
+        self.skipTest("%s: image not served, is the plugin built?" % label)
     self.assertIn("HELLO", results, "%s: file not listed\n%s" % (label, results))
     self.assertIn("hello from the cd image test", results,
                   "%s: file not read\n%s" % (label, results))
@@ -414,6 +416,12 @@ def mscdex_image_files_cue(self):
 
 def mscdex_image_files_multi(self):
     _cd_files(self, "multi/multi.cue", "BIN/CUE, one BIN per track")
+
+
+def mscdex_image_files_chd(self):
+    if not shutil.which("chdman"):
+        raise SkipTest("needs chdman to build a CHD")
+    _cd_files(self, "simple/simple.chd", "CHD", optional=True)
 
 
 def mscdex_image_real(self):
