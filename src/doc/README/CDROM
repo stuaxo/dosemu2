@@ -181,6 +181,11 @@ The image answers what MSCDEX asks the driver for: sector reads (the
 data track, as 2048 byte sectors) and the table of contents.
 </para>
 
+<para>
+A CHD file (MAME's compressed disc format) is read by the chd plugin, which
+is built when libchdr is available. Without it a CHD file is not recognised.
+</para>
+
 <screen>
   $_cdrom = "/home/me/games/game.cue"
   $_hostfs_drives = "/home/me/games/game_files:c"
