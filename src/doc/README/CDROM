@@ -187,6 +187,7 @@ BIN/CUE support is builtin, the entry should point at the cue file.
 
 <para>
 CD audio from an image is played through the dosemu2 mixer.
+CHD is supported if libchdr is available.
 </para>
 
 <screen>
