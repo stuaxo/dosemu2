@@ -5,6 +5,9 @@
 #include <string.h>
 #include <strings.h>
 #include "cd_image.h"
+#ifndef CD_IMAGE_STANDALONE
+#include "utilities.h"
+#endif
 
 const cd_track_t *cd_image_find_track(const cd_image_t *img, uint32_t lba)
 {
@@ -112,6 +115,10 @@ static void init_formats(void)
 		return;
 	done = true;
 	cd_format_register(&cd_cue_format);
+	/* other formats come from plugins, which register themselves */
+#if !defined(CD_IMAGE_STANDALONE) && defined(USE_DL_PLUGINS) && defined(USE_CHD)
+	load_plugin("chd");
+#endif
 }
 
 static const struct cd_format_ops *find_format(const char *path)
