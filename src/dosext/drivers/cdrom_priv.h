@@ -59,4 +59,30 @@ extern struct audio_status audio_status;
 #define MSCD_CTRL_VOLUME2          6
 #define MSCD_CTRL_VOLUME3          8
 
+/* Drive state as the init request leaves it */
+static inline void cdrom_status_init(void)
+{
+    audio_status.status = 0x00000710;   /* see the device status request */
+    audio_status.paused_bit = 0;
+    audio_status.media_changed = 0;
+    audio_status.volume0 = 0xFF;
+    audio_status.volume1 = 0xFF;
+    audio_status.volume2 = 0;
+    audio_status.volume3 = 0;
+    audio_status.outchan0 = 0;
+    audio_status.outchan1 = 1;
+    audio_status.outchan2 = 2;
+    audio_status.outchan3 = 3;
+}
+
+/*
+ * Track control information for the track info request: the track's
+ * CONTROL bits in the high nibble, with 0x20 ("digital copy permitted")
+ * set.
+ */
+static inline unsigned char cdrom_track_ctrl(unsigned int ctrl)
+{
+    return ctrl << 4 | 0x20;
+}
+
 #endif /* CDROM_PRIV_H */

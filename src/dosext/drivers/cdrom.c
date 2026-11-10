@@ -238,17 +238,7 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 				 *      and     ax,8
 				 *      [return ax]
 				 */
-	audio_status.status = 0x00000710;	/* see function 0x0A below */
-	audio_status.paused_bit = 0;
-	audio_status.media_changed = 0;
-	audio_status.volume0 = 0xFF;
-	audio_status.volume1 = 0xFF;
-	audio_status.volume2 = 0;
-	audio_status.volume3 = 0;
-	audio_status.outchan0 = 0;
-	audio_status.outchan1 = 1;
-	audio_status.outchan2 = 2;
-	audio_status.outchan3 = 3;
+	cdrom_status_init();
 #if 0
 	cdrom_fd = open(path_cdrom, O_RDONLY | O_NONBLOCK);
 	err = errno;
@@ -652,7 +642,7 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	    cdrom_tocentry.cdte_addr.msf.frame;
 #endif
 	*CALC_PTR(req_buf, MSCD_TRACKINFO_CTRL, u_char) =
-	    cdrom_tocentry.cdte_ctrl << 4 | 0x20;
+	    cdrom_track_ctrl(cdrom_tocentry.cdte_ctrl);
 	LO(ax) = 0;
 	break;
     case 0x12:			/* volume size */
