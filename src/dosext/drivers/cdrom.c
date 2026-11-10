@@ -164,11 +164,6 @@ static void cdrom_reset(void)
 	ioctl(cdrom_fd, CDROMRESET, NULL);
 }
 
-#define MSCD_AUDCHAN_VOLUME0       2
-#define MSCD_AUDCHAN_VOLUME1       4
-#define MSCD_AUDCHAN_VOLUME2       6
-#define MSCD_AUDCHAN_VOLUME3       8
-
 /*
  * dosemu2 sandboxes itself with landlock before it opens anything, so the
  * device or ISO file named here has to be permitted while the
@@ -560,26 +555,11 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	    HI(ax) = 1;
 
 	req_buf = SEG_ADR((unsigned char *), ds, si);
-	cdrom_volctrl.channel0 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME0, u_char);
-	cdrom_volctrl.channel1 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME1, u_char);
-	cdrom_volctrl.channel2 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME2, u_char);
-	cdrom_volctrl.channel3 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME3, u_char);
-	audio_status.volume0 = cdrom_volctrl.channel0;
-	audio_status.volume1 = cdrom_volctrl.channel1;
-	audio_status.volume2 = cdrom_volctrl.channel2;
-	audio_status.volume3 = cdrom_volctrl.channel3;
-	audio_status.outchan0 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME0 - 1, u_char);
-	audio_status.outchan1 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME1 - 1, u_char);
-	audio_status.outchan2 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME2 - 1, u_char);
-	audio_status.outchan3 =
-	    *CALC_PTR(req_buf, MSCD_CTRL_VOLUME3 - 1, u_char);
+	cdrom_read_audio_channels(req_buf);
+	cdrom_volctrl.channel0 = audio_status.volume0;
+	cdrom_volctrl.channel1 = audio_status.volume1;
+	cdrom_volctrl.channel2 = audio_status.volume2;
+	cdrom_volctrl.channel3 = audio_status.volume3;
 	ioctl(cdrom_fd, CDROMVOLCTRL, &cdrom_volctrl);
 	break;
     case 0x10:			/* audio disk info */
@@ -740,22 +720,7 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	    HI(ax) = 1;
 
 	req_buf = SEG_ADR((unsigned char *), ds, si);
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME0, u_char) =
-	    audio_status.volume0;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME1, u_char) =
-	    audio_status.volume1;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME2, u_char) =
-	    audio_status.volume2;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME3, u_char) =
-	    audio_status.volume3;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME0 - 1, u_char) =
-	    audio_status.outchan0;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME1 - 1, u_char) =
-	    audio_status.outchan1;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME2 - 1, u_char) =
-	    audio_status.outchan2;
-	*CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME3 - 1, u_char) =
-	    audio_status.outchan3;
+	cdrom_write_audio_channels(req_buf);
 	break;
     default:
 	C_printf("CDROM: unknown request %#x!\n", HI(ax));

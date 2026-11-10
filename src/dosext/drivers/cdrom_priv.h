@@ -59,6 +59,11 @@ extern struct audio_status audio_status;
 #define MSCD_CTRL_VOLUME2          6
 #define MSCD_CTRL_VOLUME3          8
 
+#define MSCD_AUDCHAN_VOLUME0       2
+#define MSCD_AUDCHAN_VOLUME1       4
+#define MSCD_AUDCHAN_VOLUME2       6
+#define MSCD_AUDCHAN_VOLUME3       8
+
 /* Drive state as the init request leaves it */
 static inline void cdrom_status_init(void)
 {
@@ -83,6 +88,39 @@ static inline void cdrom_status_init(void)
 static inline unsigned char cdrom_track_ctrl(unsigned int ctrl)
 {
     return ctrl << 4 | 0x20;
+}
+
+/*
+ * Volume and output channel of each audio channel, from an audio channel
+ * control request, into audio_status.
+ */
+static inline void cdrom_read_audio_channels(unsigned char *req_buf)
+{
+    audio_status.volume0 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME0, u_char);
+    audio_status.volume1 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME1, u_char);
+    audio_status.volume2 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME2, u_char);
+    audio_status.volume3 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME3, u_char);
+    audio_status.outchan0 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME0 - 1, u_char);
+    audio_status.outchan1 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME1 - 1, u_char);
+    audio_status.outchan2 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME2 - 1, u_char);
+    audio_status.outchan3 = *CALC_PTR(req_buf, MSCD_CTRL_VOLUME3 - 1, u_char);
+}
+
+/* The same settings from audio_status, for an audio channel info request */
+static inline void cdrom_write_audio_channels(unsigned char *req_buf)
+{
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME0, u_char) = audio_status.volume0;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME1, u_char) = audio_status.volume1;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME2, u_char) = audio_status.volume2;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME3, u_char) = audio_status.volume3;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME0 - 1, u_char) =
+        audio_status.outchan0;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME1 - 1, u_char) =
+        audio_status.outchan1;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME2 - 1, u_char) =
+        audio_status.outchan2;
+    *CALC_PTR(req_buf, MSCD_AUDCHAN_VOLUME3 - 1, u_char) =
+        audio_status.outchan3;
 }
 
 /*
