@@ -9,6 +9,7 @@ from common_os import (drdos701, frdos120, frdos130, frdosgit, msdos622,
                        msdos700, msdos710, ppdosgit)
 
 from func_bpb_set import bpb_set
+from func_cdimage_host import cdimage_host
 from func_command_com_builtins import command_com_copy, command_com_keyword_exist
 from func_command_com_cmdline_length import command_com_cmdline_length
 from func_command_com_psp_checks import command_com_psp_fcbs
@@ -115,6 +116,10 @@ class OurTestCase(BaseTestCase):
     def test_mscdex_seek(self):
         """MSCDEX seek request reads a 32-bit start sector"""
         mscdex_seek(self)
+
+    def test_cdimage_host(self):
+        """cdimage layer host-side test"""
+        cdimage_host(self)
 
     def test_mscdex_stub(self):
         """MSCDEX stub answers with no CD-ROM drive"""
