@@ -2,7 +2,7 @@ top_builddir=../../..
 include $(top_builddir)/Makefile.conf
 
 # any misc. drivers (e.g. cdrom helper)
-CFILES=cdrom.c aspi.c
+CFILES=cdrom.c aspi.c cdrom_img.c
 SFILES=
 ALL=$(CFILES) $(SFILES)
 

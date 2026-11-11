@@ -85,4 +85,12 @@ static inline unsigned char cdrom_track_ctrl(unsigned int ctrl)
     return ctrl << 4 | 0x20;
 }
 
+/*
+ * Image-backed drives (cdrom_img.c).  Returns 1 if the drive is backed by a
+ * cdimage and the request was handled, 0 if cdrom.c should handle it.
+ */
+int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
+		      unsigned char *transfer_buf, unsigned int dos_transfer_buf);
+void cdrom_img_done(void);
+
 #endif /* CDROM_PRIV_H */

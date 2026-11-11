@@ -3,10 +3,15 @@ CDIMAGE = ../../src/base/lib/cdimage
 INC = ../../src/include
 CFLAGS ?= -O2 -g
 CFLAGS += -std=gnu17 -Wall -Wextra -Wstrict-prototypes -DCDIMAGE_STANDALONE -I$(INC)
+SRCS = $(CDIMAGE)/cdimage.c $(CDIMAGE)/cdimage_cue.c
+LIBS = -lm
 OUT ?= out
 
-cdimage_test: cdimage_test.c $(CDIMAGE)/cdimage.c $(CDIMAGE)/cdimage_cue.c $(INC)/cdimage.h
-	$(CC) $(CFLAGS) -o $@ cdimage_test.c $(CDIMAGE)/cdimage.c $(CDIMAGE)/cdimage_cue.c -lm
+cdimage_test: cdimage_test.c $(SRCS) $(INC)/cdimage.h
+	$(CC) $(CFLAGS) -o $@ cdimage_test.c $(SRCS) $(LIBS)
+
+cdimage_tool: cdimage_tool.c $(SRCS) $(INC)/cdimage.h
+	$(CC) $(CFLAGS) -o $@ cdimage_tool.c $(SRCS) $(LIBS)
 
 $(OUT)/.stamp: make_images.py
 	python3 -I make_images.py $(OUT) && touch $@
@@ -15,4 +20,4 @@ check: cdimage_test $(OUT)/.stamp
 	./cdimage_test $(OUT)
 
 clean:
-	rm -rf cdimage_test $(OUT)
+	rm -rf cdimage_test cdimage_tool $(OUT)
