@@ -40,6 +40,8 @@
 #include "dos2linux.h"
 #include "utilities.h"
 #include "priv.h"
+#include "cdrom_priv.h"
+#include "redbook.h"
 
 #undef CDROM_DEBUG
 
@@ -93,61 +95,7 @@ static int eject_allowed = 1;
  *
  */
 unsigned int device_status;
-struct audio_status {
-    unsigned int status;
-    unsigned char media_changed;
-    unsigned char paused_bit;
-    unsigned int last_StartSector, last_EndSector;
-    unsigned char outchan0, outchan1, outchan2, outchan3;
-    unsigned char volume0, volume1, volume2, volume3;
-} audio_status;
-
-
-#define CALC_PTR(PTR,OFFSET,RESULT_TYPE) ((RESULT_TYPE *)(PTR+OFFSET))
-
-
-#define MSCD_GETVOLUMESIZE_SIZE    1
-
-#define MSCD_READ_ADRESSING       13
-#define MSCD_READ_STARTSECTOR     20
-#define MSCD_READ_NUMSECTORS      18
-
-#define MSCD_SEEK_STARTSECTOR     20
-
-#define MSCD_PLAY_ADRESSING       13
-#define MSCD_PLAY_STARTSECTOR     14
-#define MSCD_PLAY_NUMSECTORS      18
-
-#define MSCD_LOCH_ADRESSING        1
-#define MSCD_LOCH_LOCATION         2
-
-#define MSCD_DISKINFO_LTN          1
-#define MSCD_DISKINFO_HTN          2
-#define MSCD_DISKINFO_LEADOUT      3
-
-#define MSCD_TRACKINFO_TRACKNUM    1
-#define MSCD_TRACKINFO_TRACKPOS    2
-#define MSCD_TRACKINFO_CTRL        6
-
-#define MSCD_QCHAN_CTRL            1
-#define MSCD_QCHAN_TNO             2
-#define MSCD_QCHAN_IND             3
-#define MSCD_QCHAN_MIN             4
-#define MSCD_QCHAN_SEC             5
-#define MSCD_QCHAN_FRM             6
-#define MSCD_QCHAN_ZERO            7
-#define MSCD_QCHAN_AMIN            8
-#define MSCD_QCHAN_ASEC            9
-#define MSCD_QCHAN_AFRM           10
-
-#define MSCD_AUDSTAT_PAUSED        1
-#define MSCD_AUDSTAT_START         3
-#define MSCD_AUDSTAT_END           7
-
-#define MSCD_CTRL_VOLUME0          2
-#define MSCD_CTRL_VOLUME1          4
-#define MSCD_CTRL_VOLUME2          6
-#define MSCD_CTRL_VOLUME3          8
+struct audio_status audio_status;
 
 #ifdef __linux__
 const char *Path_cdrom[] =
@@ -290,17 +238,7 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 				 *      and     ax,8
 				 *      [return ax]
 				 */
-	audio_status.status = 0x00000710;	/* see function 0x0A below */
-	audio_status.paused_bit = 0;
-	audio_status.media_changed = 0;
-	audio_status.volume0 = 0xFF;
-	audio_status.volume1 = 0xFF;
-	audio_status.volume2 = 0;
-	audio_status.volume3 = 0;
-	audio_status.outchan0 = 0;
-	audio_status.outchan1 = 1;
-	audio_status.outchan2 = 2;
-	audio_status.outchan3 = 3;
+	cdrom_status_init();
 #if 0
 	cdrom_fd = open(path_cdrom, O_RDONLY | O_NONBLOCK);
 	err = errno;
@@ -356,9 +294,9 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 		*CALC_PTR(req_buf, MSCD_READ_STARTSECTOR + 1, u_char);
 	    cdrom_msf.cdmsf_frame0 =
 		*CALC_PTR(req_buf, MSCD_READ_STARTSECTOR + 0, u_char);
-	    Sector =
-		cdrom_msf.cdmsf_min0 * 60 * 75 +
-		cdrom_msf.cdmsf_sec0 * 75 + cdrom_msf.cdmsf_frame0 - 150;
+	    Sector = cd_msf_to_frames(cdrom_msf.cdmsf_min0,
+				      cdrom_msf.cdmsf_sec0,
+				      cdrom_msf.cdmsf_frame0) - CD_MSF_OFFSET;
 	} else {
 	    Sector = *CALC_PTR(req_buf, MSCD_READ_STARTSECTOR, u_int);
 	}
@@ -441,23 +379,22 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 		*CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 1, u_char);
 	    cdrom_msf.cdmsf_frame0 =
 		*CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR + 0, u_char);
-	    Sector_plus_150 =
-		cdrom_msf.cdmsf_min0 * 60 * 75 +
-		cdrom_msf.cdmsf_sec0 * 75 + cdrom_msf.cdmsf_frame0;
+	    Sector_plus_150 = cd_msf_to_frames(cdrom_msf.cdmsf_min0,
+					       cdrom_msf.cdmsf_sec0,
+					       cdrom_msf.cdmsf_frame0);
 	    audio_status.last_StartSector = Sector_plus_150;
 	} else {
-	    Sector_plus_150 =
-		*CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR, u_int) + 150;
-	    cdrom_msf.cdmsf_min0 = (Sector_plus_150 / (60 * 75));
-	    cdrom_msf.cdmsf_sec0 = (Sector_plus_150 % (60 * 75)) / 75;
-	    cdrom_msf.cdmsf_frame0 = (Sector_plus_150 % (60 * 75)) % 75;
+	    Sector_plus_150 = *CALC_PTR(req_buf, MSCD_PLAY_STARTSECTOR, u_int)
+		+ CD_MSF_OFFSET;
+	    cd_frames_to_msf(Sector_plus_150, &cdrom_msf.cdmsf_min0,
+			     &cdrom_msf.cdmsf_sec0,
+			     &cdrom_msf.cdmsf_frame0);
 	    audio_status.last_StartSector = Sector_plus_150;
 	}
 	Sector_plus_150 +=
 	    *CALC_PTR(req_buf, MSCD_PLAY_NUMSECTORS, u_int);
-	cdrom_msf.cdmsf_min1 = (Sector_plus_150 / (60 * 75));
-	cdrom_msf.cdmsf_sec1 = (Sector_plus_150 % (60 * 75)) / 75;
-	cdrom_msf.cdmsf_frame1 = (Sector_plus_150 % (60 * 75)) % 75;
+	cd_frames_to_msf(Sector_plus_150, &cdrom_msf.cdmsf_min1,
+			 &cdrom_msf.cdmsf_sec1, &cdrom_msf.cdmsf_frame1);
 
 	audio_status.last_EndSector = Sector_plus_150;
 	audio_status.paused_bit = 0;
@@ -475,10 +412,10 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	LO(ax) = 0;
 	if (ioctl(cdrom_fd, CDROMSUBCHNL, &cdrom_subchnl) == 0) {
 	    if (cdrom_subchnl.cdsc_audiostatus == CDROM_AUDIO_PLAY) {
-		audio_status.last_StartSector =
-		    cdrom_subchnl.cdsc_absaddr.msf.minute * 60 * 75
-		    + cdrom_subchnl.cdsc_absaddr.msf.second * 75
-		    + cdrom_subchnl.cdsc_absaddr.msf.frame;
+		audio_status.last_StartSector = cd_msf_to_frames(
+		    cdrom_subchnl.cdsc_absaddr.msf.minute,
+		    cdrom_subchnl.cdsc_absaddr.msf.second,
+		    cdrom_subchnl.cdsc_absaddr.msf.frame);
 		ioctl(cdrom_fd, CDROMPAUSE, NULL);
 		audio_status.paused_bit = 1;
 	    } else {
@@ -519,9 +456,10 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	req_buf = SEG_ADR((unsigned char *), ds, si);
 	if (*CALC_PTR(req_buf, MSCD_LOCH_ADRESSING, u_char) == 0) {
 	    *CALC_PTR(req_buf, MSCD_LOCH_LOCATION, u_int)
-		= cdrom_subchnl.cdsc_absaddr.msf.minute * 60 * 75
-		+ cdrom_subchnl.cdsc_absaddr.msf.second * 75
-		+ cdrom_subchnl.cdsc_absaddr.msf.frame - 150;
+		= cd_msf_to_frames(cdrom_subchnl.cdsc_absaddr.msf.minute,
+				   cdrom_subchnl.cdsc_absaddr.msf.second,
+				   cdrom_subchnl.cdsc_absaddr.msf.frame)
+		- CD_MSF_OFFSET;
 	} else {		/* red book addressing */
 	    *CALC_PTR(req_buf, MSCD_LOCH_LOCATION + 3, u_char) = 0;
 	    *CALC_PTR(req_buf, MSCD_LOCH_LOCATION + 2, u_char) =
@@ -704,7 +642,7 @@ void cdrom_helper(unsigned char *req_buf, unsigned char *transfer_buf,
 	    cdrom_tocentry.cdte_addr.msf.frame;
 #endif
 	*CALC_PTR(req_buf, MSCD_TRACKINFO_CTRL, u_char) =
-	    cdrom_tocentry.cdte_ctrl << 4 | 0x20;
+	    cdrom_track_ctrl(cdrom_tocentry.cdte_ctrl);
 	LO(ax) = 0;
 	break;
     case 0x12:			/* volume size */
