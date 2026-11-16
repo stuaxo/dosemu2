@@ -169,6 +169,28 @@ the others will get assigned successive driveletters.
 </para>
 
 <para>
+CD images with audio tracks:
+</para>
+
+<para>
+$_cdrom can either point at a physical cdrom device or an image file.
+</para>
+
+<para>
+$_cdrom can point at an image file, ISO is supported as well
+as formats that contain cd audio.
+</para>
+
+<para>
+BIN/CUE support is builtin, the entry should point at the cue file.
+</para>
+
+<screen>
+  $_cdrom = "/home/me/games/game.cue"
+  $_hostfs_drives = "/home/me/games/game_files:c"
+</screen>
+
+<para>
 History:
 </para>
 
