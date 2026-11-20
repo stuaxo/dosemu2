@@ -18,9 +18,12 @@ extern struct audio_status audio_status;
 
 #define MSCD_GETVOLUMESIZE_SIZE    1
 
+#define MSCD_SECTSIZE_READMODE     1
+
 #define MSCD_READ_ADRESSING       13
 #define MSCD_READ_STARTSECTOR     20
 #define MSCD_READ_NUMSECTORS      18
+#define MSCD_READ_DATAMODE        24 /* 0 cooked, 1 raw */
 
 #define MSCD_SEEK_STARTSECTOR     20
 

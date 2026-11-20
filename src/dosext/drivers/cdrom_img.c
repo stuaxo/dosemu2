@@ -132,13 +132,34 @@ static void fail(int code)
   LO(ax) = 1;
 }
 
+/*
+ * A raw read of an audio sector gives the 588 stereo samples as they are
+ * on the disc, little-endian.  Raw reads of data sectors are not
+ * supported.
+ */
+static int read_raw(cdimage_t *img, uint32_t lba, uint8_t *out)
+{
+  const cdimage_track_t *t = cdimage_find_track(img, lba);
+  int16_t pcm[CD_AUDIO_FRAMES * 2];
+  int i;
+
+  if (!t || !t->is_audio || cdimage_read_audio(img, lba, pcm))
+    return -1;
+  for (i = 0; i < CD_AUDIO_FRAMES * 2; i++) {
+    out[i * 2] = pcm[i] & 0xff;
+    out[i * 2 + 1] = (uint16_t) pcm[i] >> 8;
+  }
+  return 0;
+}
+
 static void do_read_long(cdimage_t *img, unsigned char *req_buf,
                          unsigned char *transfer_buf,
                          unsigned int dos_transfer_buf)
 {
   uint32_t lba;
-  unsigned n, i;
-  uint8_t sec[CD_FRAME_COOKED];
+  unsigned n, i, size;
+  bool raw;
+  uint8_t sec[CD_FRAME_RAW];
 
   if (req_buf == NULL && transfer_buf == NULL) {
     req_buf = SEG_ADR((unsigned char *), es, di);
@@ -157,7 +178,10 @@ static void do_read_long(cdimage_t *img, unsigned char *req_buf,
     lba = *CALC_PTR(req_buf, MSCD_READ_STARTSECTOR, u_int);
   }
   n = *CALC_PTR(req_buf, MSCD_READ_NUMSECTORS, u_short);
-  C_printf("CDROM: image read sector %#x count %u\n", lba, n);
+  raw = *CALC_PTR(req_buf, MSCD_READ_DATAMODE, u_char) == 1;
+  size = raw ? CD_FRAME_RAW : CD_FRAME_COOKED;
+  C_printf("CDROM: image read sector %#x count %u%s\n", lba, n,
+           raw ? " raw" : "");
 
   if (lba >= img->leadout_lba || n > img->leadout_lba - lba) {
     fail(ERR_SEEK);
@@ -167,7 +191,8 @@ static void do_read_long(cdimage_t *img, unsigned char *req_buf,
     int err;
 
     cdrom_img_lock();
-    err = cdimage_read_cooked(img, lba + i, sec);
+    err = raw ? read_raw(img, lba + i, sec) :
+        cdimage_read_cooked(img, lba + i, sec);
     cdrom_img_unlock();
     if (err) {
       C_printf("CDROM: image read of sector %#x failed\n", lba + i);
@@ -175,10 +200,9 @@ static void do_read_long(cdimage_t *img, unsigned char *req_buf,
       return;
     }
     if (transfer_buf == NULL)
-      MEMCPY_2DOS(dos_transfer_buf + i * CD_FRAME_COOKED, sec,
-                  CD_FRAME_COOKED);
+      MEMCPY_2DOS(dos_transfer_buf + i * size, sec, size);
     else
-      memcpy(transfer_buf + i * CD_FRAME_COOKED, sec, CD_FRAME_COOKED);
+      memcpy(transfer_buf + i * size, sec, size);
   }
   LO(ax) = 0;
 }
@@ -361,8 +385,12 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
       LO(ax) = 0;
       break;
     case 0x08:                 /* sector size */
+      req_buf = SEG_ADR((unsigned char *), ds, si);
       LO(ax) = 0;
-      LWORD(ebx) = CD_FRAME_COOKED;
+      if (*CALC_PTR(req_buf, MSCD_SECTSIZE_READMODE, u_char) == 1)
+        LWORD(ebx) = CD_FRAME_RAW;
+      else
+        LWORD(ebx) = CD_FRAME_COOKED;
       break;
     case 0x09:                 /* media changed */
       HI(ax) = 0;
@@ -375,7 +403,8 @@ int cdrom_img_request(int idx, const char *path, unsigned char *req_buf,
     case 0x0A:                 /* device status */
       HI(ax) = 0;
       LO(ax) = 0;
-      LWORD(ebx) = audio_status.status;
+      /* bit 2: raw reads are supported (of audio sectors) */
+      LWORD(ebx) = audio_status.status | 0x4;
       set_busy(idx);
       break;
     case 0x0B:                 /* drive reset */
