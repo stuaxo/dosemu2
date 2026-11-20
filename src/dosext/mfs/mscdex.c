@@ -70,7 +70,7 @@ void unregister_cdrom(int drive)
 static int ReadSectors(int drive, Bit32u sector, Bit16u num, unsigned char *buf,
 		       unsigned int dosbuf)
 {
-	unsigned char req_buf[24];
+	unsigned char req_buf[27] = { 0 };	/* the read long request */
 	unsigned save_ax = _AX;
 	int err;
 	Bit8u driver = GetDriver(drive);
