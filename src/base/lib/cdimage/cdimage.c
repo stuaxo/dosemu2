@@ -165,3 +165,36 @@ void cdimage_close(cdimage_t *img)
   if (img)
     img->close(img);
 }
+
+#define MAX_DECODERS    4
+static const struct cdimage_audio_ops *decoders[MAX_DECODERS];
+static int ndecoders;
+
+void cdimage_audio_register(const struct cdimage_audio_ops *ops)
+{
+  int i;
+
+  for (i = 0; i < ndecoders; i++)
+    if (decoders[i] == ops)
+      return;
+  if (ndecoders >= MAX_DECODERS) {
+    cd_log("too many audio decoders, ignoring %s\n", ops->name);
+    return;
+  }
+  decoders[ndecoders++] = ops;
+}
+
+const struct cdimage_audio_ops *cdimage_audio_open(const char *path,
+                                                   void **h,
+                                                   uint64_t *frames)
+{
+  int i;
+
+  init_formats();
+  for (i = 0; i < ndecoders; i++) {
+    *h = decoders[i]->open(path, frames);
+    if (*h)
+      return decoders[i];
+  }
+  return NULL;
+}

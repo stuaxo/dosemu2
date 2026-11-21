@@ -6,7 +6,9 @@
  * PREGAP/POSTGAP occupy disc time but no file space,
  * so they shift every later disc LBA in that file.
  *
- * Audio in a BIN is raw little-endian 16-bit stereo.
+ * Audio in a BIN is raw little-endian 16-bit stereo.  A FILE of any
+ * other type is an audio file (as DOSBox allows), read through a decoder
+ * from a plugin; its sectors are served as if it were such a BIN.
  */
 #define _FILE_OFFSET_BITS 64
 #include <ctype.h>
@@ -22,7 +24,9 @@
 typedef struct {
   char *path;
   FILE *fp;
-  off_t size;
+  off_t size;                   /* bytes, as if it were a BIN */
+  const struct cdimage_audio_ops *aops; /* audio file, else NULL */
+  void *ah;
   uint32_t sector_size;         /* 0 until the first track in it is seen */
   uint32_t base_lba;            /* disc LBA of file sector 0 */
   uint32_t end_lba;             /* disc LBA just past the file's data */
@@ -39,6 +43,24 @@ typedef struct {
   cue_trk_t trk[CDI_MAX_TRACKS];
 } cue_priv_t;
 
+/* Sector n of an audio file, as little-endian samples; the end of the
+ * last sector is padded with silence. */
+static int read_audio_file(cue_file_t *f, uint64_t n, uint8_t *out)
+{
+  int16_t pcm[CD_AUDIO_FRAMES * 2];
+  int got, i;
+
+  got = f->aops->read(f->ah, n * CD_AUDIO_FRAMES, pcm, CD_AUDIO_FRAMES);
+  if (got < 0)
+    return -1;
+  memset(pcm + got * 2, 0, (CD_AUDIO_FRAMES - got) * 2 * sizeof(*pcm));
+  for (i = 0; i < CD_AUDIO_FRAMES * 2; i++) {
+    out[i * 2] = pcm[i] & 0xff;
+    out[i * 2 + 1] = (uint16_t) pcm[i] >> 8;
+  }
+  return 0;
+}
+
 static int cue_read_frame(cdimage_t *img, const cdimage_track_t *t,
                           uint32_t lba, uint8_t *out)
 {
@@ -51,6 +73,8 @@ static int cue_read_frame(cdimage_t *img, const cdimage_track_t *t,
     return -1;
   off = (off_t) (ct->file_lba0 + (lba - t->first_stored_lba)) *
       f->sector_size;
+  if (f->aops)
+    return read_audio_file(f, off / CD_FRAME_RAW, out);
   if (!f->fp) {
     f->fp = fopen(f->path, "rb");
     if (!f->fp) {
@@ -72,6 +96,8 @@ static void cue_close(cdimage_t *img)
   for (i = 0; i < p->nfiles; i++) {
     if (p->files[i].fp)
       fclose(p->files[i].fp);
+    if (p->files[i].aops)
+      p->files[i].aops->close(p->files[i].ah);
     free(p->files[i].path);
   }
   free(p);
@@ -191,8 +217,10 @@ static int finish_file(cue_file_t *f, uint32_t synth_in_file)
     f->end_lba = f->base_lba + synth_in_file;
     return 0;
   }
+  /* a partial last sector of an audio file is padded with silence */
   f->end_lba = f->base_lba + synth_in_file +
-      (uint32_t) (f->size / f->sector_size);
+      (uint32_t) ((f->size + (f->aops ? f->sector_size - 1 : 0)) /
+                  f->sector_size);
   return 0;
 }
 
@@ -216,8 +244,8 @@ static int cue_file(cue_parse_t *c, char **s)
   char *a = next_tok(s);
   char *b = next_tok(s);
 
-  if (!a || !b || strcasecmp(b, "BINARY")) {
-    cd_log("%s:%d: only FILE ... BINARY supported\n", c->path, c->lineno);
+  if (!a || !b) {
+    cd_log("%s:%d: bad FILE\n", c->path, c->lineno);
     return -1;
   }
   if (p->nfiles >= CDI_MAX_TRACKS)
@@ -233,6 +261,17 @@ static int cue_file(cue_parse_t *c, char **s)
     return -1;
   }
   f->size = st.st_size;
+  if (strcasecmp(b, "BINARY")) {
+    uint64_t frames;
+
+    f->aops = cdimage_audio_open(f->path, &f->ah, &frames);
+    if (!f->aops) {
+      cd_log("%s:%d: cannot decode %s (%s)\n", c->path, c->lineno, a, b);
+      p->nfiles++;              /* so close() frees it */
+      return -1;
+    }
+    f->size = frames * 4;
+  }
   f->base_lba = p->nfiles ? p->files[p->nfiles - 1].end_lba : 0;
   p->nfiles++;
   c->synth_in_file = 0;
@@ -270,6 +309,10 @@ static int cue_track(cue_parse_t *c, char **s)
   f = &p->files[p->nfiles - 1];
   if (f->sector_size && f->sector_size != t->sector_size) {
     cd_log("%s:%d: mixed sector sizes in one FILE\n", c->path, c->lineno);
+    return -1;
+  }
+  if (f->aops && !t->is_audio) {
+    cd_log("%s:%d: a data track in an audio file\n", c->path, c->lineno);
     return -1;
   }
   f->sector_size = t->sector_size;
