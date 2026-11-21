@@ -131,6 +131,9 @@ static void init_formats(void)
 #if !defined(CDIMAGE_STANDALONE) && defined(USE_DL_PLUGINS) && defined(USE_CHD)
   load_plugin("chd");
 #endif
+#if !defined(CDIMAGE_STANDALONE) && defined(USE_DL_PLUGINS) && defined(USE_SNDFILE)
+  load_plugin("sndfile");
+#endif
 }
 
 static const struct cdimage_format_ops *find_format(const char *path)
