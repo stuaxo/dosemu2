@@ -16,6 +16,14 @@ SRCS += $(PLG)/chd/cdimage_chd.c
 LIBS += $(CHDR_LIBS)
 endif
 
+# Audio-file tracks come from the sndfile plugin, built with libsndfile
+SNDFILE_LIBS := $(shell pkg-config --libs sndfile 2>/dev/null)
+ifneq ($(SNDFILE_LIBS),)
+CFLAGS += -DHAVE_SNDFILE $(shell pkg-config --cflags sndfile)
+SRCS += $(PLG)/sndfile/cdimage_sndfile.c
+LIBS += $(SNDFILE_LIBS)
+endif
+
 cdimage_test: cdimage_test.c $(SRCS) $(INC)/cdimage.h
 	$(CC) $(CFLAGS) -o $@ cdimage_test.c $(SRCS) $(LIBS)
 

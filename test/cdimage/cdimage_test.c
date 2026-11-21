@@ -383,6 +383,180 @@ static void test_chd(void)
 }
 #endif
 
+#ifdef HAVE_SNDFILE
+#include <sndfile.h>
+
+#define AUD_SECTORS 525         /* multi/audio.bin: 150 silent + 375 sine */
+
+/* multi/audio.bin as 16-bit stereo samples */
+static int16_t *load_audio_bin(void)
+{
+  char p[1024];
+  int16_t *pcm = malloc(AUD_SECTORS * CD_FRAME_RAW);
+  uint8_t *b = malloc(AUD_SECTORS * CD_FRAME_RAW);
+  FILE *f;
+  size_t i;
+
+  snprintf(p, sizeof(p), "%s/multi/audio.bin", dir);
+  f = fopen(p, "rb");
+  CHECK(f && fread(b, CD_FRAME_RAW, AUD_SECTORS, f) == AUD_SECTORS);
+  if (f)
+    fclose(f);
+  for (i = 0; i < AUD_SECTORS * CD_FRAME_RAW / 2; i++)
+    pcm[i] = (int16_t) (b[2 * i] | b[2 * i + 1] << 8);
+  free(b);
+  return pcm;
+}
+
+/* Writes frames sample pairs (one channel of them if channels == 1) */
+static void write_audio(const char *name, int format, int rate, int channels,
+                        const int16_t *pcm, sf_count_t frames)
+{
+  SF_INFO info = {.samplerate = rate,.channels = channels,.format = format };
+  char p[1024];
+  SNDFILE *sf;
+  double q = 1.0;
+
+  snprintf(p, sizeof(p), "%s/multi/%s", dir, name);
+  sf = sf_open(p, SFM_WRITE, &info);
+  CHECK(sf != NULL);
+  if (!sf)
+    return;
+  sf_command(sf, SFC_SET_VBR_ENCODING_QUALITY, &q, sizeof(q));
+  if (channels == 2) {
+    CHECK(sf_writef_short(sf, pcm, frames) == frames);
+  } else {
+    sf_count_t i;
+
+    for (i = 0; i < frames; i++)
+      CHECK(sf_writef_short(sf, &pcm[i * 2], 1) == 1);
+  }
+  sf_close(sf);
+}
+
+/* The multi disc, with its audio track read from an audio file */
+static cdimage_t *open_with(const char *cue, const char *file,
+                            const char *type, const char *mode)
+{
+  char p[1024];
+  FILE *f;
+
+  snprintf(p, sizeof(p), "%s/multi/%s", dir, cue);
+  f = fopen(p, "w");
+  CHECK(f != NULL);
+  if (!f)
+    return NULL;
+  fprintf(f, "FILE \"data.bin\" BINARY\r\n"
+          "  TRACK 01 MODE1/2352\r\n    INDEX 01 00:00:00\r\n"
+          "FILE \"%s\" %s\r\n"
+          "  TRACK 02 %s\r\n    INDEX 00 00:00:00\r\n"
+          "    INDEX 01 00:02:00\r\n", file, type, mode);
+  fclose(f);
+  return cdimage_open(p);
+}
+
+/* Largest difference from the BIN over the audio track; -1 on a read
+ * error or if the channels differ when mono is set. */
+static int audio_diff(cdimage_t *img, const int16_t *ref, bool mono)
+{
+  int16_t pcm[CD_AUDIO_FRAMES * 2];
+  int worst = 0, i;
+  uint32_t lba;
+
+  for (lba = 300; lba < 825; lba++) {
+    const int16_t *r = ref + (lba - 300) * CD_AUDIO_FRAMES * 2;
+
+    if (cdimage_read_audio(img, lba, pcm))
+      return -1;
+    for (i = 0; i < CD_AUDIO_FRAMES * 2; i++) {
+      int want = mono ? r[i & ~1] : r[i];
+
+      if (mono && pcm[i] != pcm[i ^ 1])
+        return -1;
+      if (abs(pcm[i] - want) > worst)
+        worst = abs(pcm[i] - want);
+    }
+  }
+  return worst;
+}
+
+static void test_audio_files(void)
+{
+  const sf_count_t frames = (sf_count_t) AUD_SECTORS * CD_AUDIO_FRAMES;
+  int16_t *ref = load_audio_bin();
+  int16_t pcm[CD_AUDIO_FRAMES * 2];
+  cdimage_t *img;
+  int d;
+
+  write_audio("aud.wav", SF_FORMAT_WAV | SF_FORMAT_PCM_16, 44100, 2, ref,
+              frames);
+  write_audio("aud.flac", SF_FORMAT_FLAC | SF_FORMAT_PCM_16, 44100, 2,
+              ref, frames);
+  write_audio("aud.ogg", SF_FORMAT_OGG | SF_FORMAT_VORBIS, 44100, 2, ref,
+              frames);
+  write_audio("mono.wav", SF_FORMAT_WAV | SF_FORMAT_PCM_16, 44100, 1, ref,
+              frames);
+  write_audio("short.flac", SF_FORMAT_FLAC | SF_FORMAT_PCM_16, 44100, 2,
+              ref, frames - 100);
+  write_audio("slow.wav", SF_FORMAT_WAV | SF_FORMAT_PCM_16, 22050, 2, ref,
+              frames);
+
+  /* lossless files read back as the BIN; the type need not match */
+  img = open_with("wav.cue", "aud.wav", "WAVE", "AUDIO");
+  CHECK(img != NULL);
+  if (img) {
+    expect_track(img, 1, 300, 450, 825, true, true);
+    CHECK(img->leadout_lba == 825);
+    CHECK(audio_diff(img, ref, false) == 0);
+    check_sine(img, 440, 450, 450);
+    cdimage_close(img);
+  }
+  img = open_with("flac.cue", "aud.flac", "MP3", "AUDIO");
+  CHECK(img != NULL);
+  if (img) {
+    expect_track(img, 1, 300, 450, 825, true, true);
+    CHECK(audio_diff(img, ref, false) == 0);
+    cdimage_close(img);
+  }
+
+  /* Vorbis is lossy: the same length, and close to the BIN */
+  img = open_with("ogg.cue", "aud.ogg", "MP3", "AUDIO");
+  CHECK(img != NULL);
+  if (img) {
+    expect_track(img, 1, 300, 450, 825, true, true);
+    d = audio_diff(img, ref, false);
+    CHECK(d >= 0 && d < 600);
+    cdimage_close(img);
+  }
+
+  /* mono plays on both channels */
+  img = open_with("mono.cue", "mono.wav", "WAVE", "AUDIO");
+  CHECK(img != NULL);
+  if (img) {
+    CHECK(audio_diff(img, ref, true) == 0);
+    cdimage_close(img);
+  }
+
+  /* a partial last sector is padded with silence */
+  img = open_with("short.cue", "short.flac", "WAVE", "AUDIO");
+  CHECK(img != NULL);
+  if (img) {
+    expect_track(img, 1, 300, 450, 825, true, true);
+    CHECK(cdimage_read_audio(img, 824, pcm) == 0);
+    CHECK(!memcmp(pcm, ref + 524 * CD_AUDIO_FRAMES * 2,
+                  (CD_AUDIO_FRAMES - 100) * 4));
+    CHECK(all_zero(pcm + (CD_AUDIO_FRAMES - 100) * 2, 100 * 4));
+    cdimage_close(img);
+  }
+
+  /* only 44100 Hz; no data tracks; a BIN is not an audio file */
+  CHECK(open_with("slow.cue", "slow.wav", "WAVE", "AUDIO") == NULL);
+  CHECK(open_with("data.cue", "aud.wav", "WAVE", "MODE1/2352") == NULL);
+  CHECK(open_with("bin.cue", "audio.bin", "MOTOROLA", "AUDIO") == NULL);
+  free(ref);
+}
+#endif
+
 int main(int argc, char **argv)
 {
   if (argc != 2) {
@@ -404,6 +578,11 @@ int main(int argc, char **argv)
   test_chd();
 #else
   fprintf(stderr, "SKIP: built without libchdr\n");
+#endif
+#ifdef HAVE_SNDFILE
+  test_audio_files();
+#else
+  fprintf(stderr, "SKIP: built without libsndfile\n");
 #endif
   printf("%d checks, %d failures\n", checks, failures);
   return failures != 0;
