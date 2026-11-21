@@ -77,7 +77,7 @@ from func_mscdex_iso import (mscdex_iso_files, mscdex_nul_redirect_cue,
 from func_mscdex_seek import mscdex_seek
 from func_mscdex_image import mscdex_image, mscdex_image_audio, \
     mscdex_image_files_chd, mscdex_image_files_cue, mscdex_image_files_multi, \
-    mscdex_image_real, mscdex_image_sound, mscdex_image_toc
+    mscdex_image_raw, mscdex_image_real, mscdex_image_sound, mscdex_image_toc
 from func_mscdex_stub import mscdex_stub
 from func_kernel_cmdline import kernel_cmdline
 from func_findfile import (mfs_findfile_ufs_lfn, mfs_findfile_ufs_sfn,
@@ -156,6 +156,10 @@ class OurTestCase(BaseTestCase):
     def test_mscdex_image_sound(self):
         """MSCDEX CD audio from a BIN/CUE image reaches the mixer"""
         mscdex_image_sound(self)
+
+    def test_mscdex_image_raw(self):
+        """MSCDEX raw reads of audio sectors from a BIN/CUE image"""
+        mscdex_image_raw(self)
 
     def test_mscdex_image_files_cue(self):
         """Read a file from a BIN/CUE data track with SHSUCDX"""

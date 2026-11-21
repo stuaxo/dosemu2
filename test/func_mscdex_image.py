@@ -664,6 +664,230 @@ $_wav_file = "%s"
     self.assertAlmostEqual(freq, 220, delta=5, msg=str(freq))
 
 
+def mscdex_image_raw(self):
+    # Raw (2352-byte) reads through INT 2Fh AX=1510h, as a CD player that
+    # reads audio digitally does them.  On the simple disc, LBA 449 is the
+    # end of track 2's synthetic pregap (silence) and LBA 450 is its
+    # INDEX 01, the first sector of the 440Hz sine in the BIN.  A raw read
+    # of a data sector fails.  The drive reports raw reads in its device
+    # status, and a sector size of 2352 for them.
+    out = _make_images(self)
+    hostdir = Path(self.imagedir) / "cdfiles"
+    hostdir.mkdir(exist_ok=True)
+
+    config = """\
+$_hdimage = "dXXXXs/c:hdtype1 +1"
+$_floppy_a = ""
+$_cdrom = "%s"
+$_hostfs_drives = "%s:c"
+""" % (out / "simple" / "simple.cue", hostdir)
+
+    self.mkfile("testit.bat", """\
+c:\\cdraw
+rem end
+""", newline="\r\n")
+
+    self.mkcom_with_nasm("cdraw", r"""
+
+bits 16
+cpu 386
+
+org 100h
+
+section .text
+
+    push    cs
+    pop     ds
+    push    cs
+    pop     es
+
+    mov     ax, 1500h
+    xor     bx, bx
+    xor     cx, cx
+    int     2fh
+    mov     [fdrv], cx
+
+    ; raw read of 2 sectors from HSG 449
+    mov     word [rl_buf], rawbuf
+    mov     [rl_buf+2], cs
+    mov     dword [rl_start], 449
+    mov     word [rl_count], 2
+    call    readlong
+    mov     di, o_st1
+    call    hex16
+
+    ; raw read of the volume descriptor in the data track
+    mov     dword [rl_start], 16
+    mov     word [rl_count], 1
+    mov     word [rl_buf], buf2
+    call    readlong
+    mov     di, o_st2
+    call    hex16
+
+    ; device status
+    mov     word [io_buf], devstat
+    mov     word [io_count], 5
+    call    ioctlin
+    mov     ax, [devstat+1]
+    mov     di, o_dev
+    call    hex16
+
+    ; sector size, raw then cooked
+    mov     word [io_buf], secsz
+    mov     word [io_count], 4
+    mov     byte [secsz+1], 1
+    call    ioctlin
+    mov     ax, [secsz+2]
+    mov     di, o_sz1
+    call    hex16
+    mov     byte [secsz+1], 0
+    call    ioctlin
+    mov     ax, [secsz+2]
+    mov     di, o_sz0
+    call    hex16
+
+    ; save the raw sectors for the host side to compare
+    mov     ah, 3ch
+    xor     cx, cx
+    mov     dx, fname
+    int     21h
+    jc      .print
+    mov     bx, ax
+    mov     ah, 40h
+    mov     cx, 2 * 2352
+    mov     dx, rawbuf
+    int     21h
+    mov     ah, 3eh
+    int     21h
+
+.print:
+    mov     ah, 9
+    mov     dx, result
+    int     21h
+
+    mov     ax, 4c00h
+    int     21h
+
+; send the read long request, ax = its status word
+readlong:
+    mov     word [rl+3], 0
+    mov     ax, 1510h
+    mov     cx, [fdrv]
+    mov     bx, rl
+    int     2fh
+    mov     ax, [rl+3]
+    ret
+
+; send the IOCTL input request, ax = its status word
+ioctlin:
+    mov     word [io+3], 0
+    mov     [io_buf+2], cs
+    mov     ax, 1510h
+    mov     cx, [fdrv]
+    mov     bx, io
+    int     2fh
+    mov     ax, [io+3]
+    ret
+
+; ax = value to print, di -> 4 chars of output
+hex16:
+    mov     cx, 4
+.loop:
+    rol     ax, 4
+    push    ax
+    and     al, 0fh
+    add     al, '0'
+    cmp     al, '9'
+    jbe     .store
+    add     al, 7
+.store:
+    mov     [di], al
+    inc     di
+    pop     ax
+    loop    .loop
+    ret
+
+section .data
+
+fdrv:   dw 0
+
+; read long request header, HSG addressing, raw mode
+rl:     db 27, 0, 128
+        dw 0
+        times 8 db 0
+        db 0
+rl_buf: dd 0
+rl_count:
+        dw 0
+rl_start:
+        dd 0
+        db 1
+        db 0, 0
+
+; IOCTL input request header
+io:     db 26, 0, 3
+        dw 0
+        times 8 db 0
+        db 0
+io_buf: dd 0
+io_count:
+        dw 0
+        dw 0
+        dd 0
+
+devstat:
+        db 6
+        dd 0
+secsz:  db 7, 0
+        dw 0
+
+fname:  db "RAWREAD.BIN", 0
+
+result:
+    db "RAW("
+o_st1:
+    db "XXXX"
+    db ") DATA("
+o_st2:
+    db "XXXX"
+    db ") DEV("
+o_dev:
+    db "XXXX"
+    db ") RAWSZ("
+o_sz1:
+    db "XXXX"
+    db ") SZ("
+o_sz0:
+    db "XXXX"
+    db ")",13,10,'$'
+
+section .bss
+rawbuf: resb 2 * 2352
+buf2:   resb 2352
+""")
+
+    results = self.runDosemu("testit.bat", config=config)
+
+    r = re.compile(r'RAW\(([0-9A-F]{4})\) DATA\(([0-9A-F]{4})\) '
+                   r'DEV\(([0-9A-F]{4})\) RAWSZ\(([0-9A-F]{4})\) '
+                   r'SZ\(([0-9A-F]{4})\)')
+    self.assertRegex(results, r)
+    t = r.search(results)
+    self.assertEqual(int(t.group(1), 16) & 0x8000, 0, results)
+    self.assertNotEqual(int(t.group(2), 16) & 0x8000, 0, results)
+    self.assertNotEqual(int(t.group(3), 16) & 0x4, 0, results)
+    self.assertEqual(int(t.group(4), 16), 2352, results)
+    self.assertEqual(int(t.group(5), 16), 2048, results)
+
+    # the data track is 300 sectors, so INDEX 01 of track 2 is there
+    bin_ = (out / "simple" / "simple.bin").read_bytes()
+    want = bytes(2352) + bin_[300 * 2352:301 * 2352]
+    got = [f for f in self.workdir.iterdir()
+           if f.name.upper() == "RAWREAD.BIN"]
+    self.assertEqual(len(got), 1, results)
+    self.assertEqual(got[0].read_bytes(), want)
+
+
 def _cd_files(self, image, label, optional=False):
     # Read a file off the data track of an image with a real DOS CD
     # extension.  SHSUCDX talks to dosemu2's cdrom.sys, parses the ISO 9660
