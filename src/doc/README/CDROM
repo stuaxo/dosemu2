@@ -190,6 +190,12 @@ CD audio from an image is played through the dosemu2 mixer.
 CHD is supported if libchdr is available.
 </para>
 
+<para>
+As in DOSBox, a cue file can name audio files (WAV, FLAC, Ogg Vorbis,
+Opus or MP3, at 44100 Hz) as audio tracks, if libsndfile is available.
+This covers the GAME.INS sheets that GOG ships.
+</para>
+
 <screen>
   $_cdrom = "/home/me/games/game.cue"
   $_hostfs_drives = "/home/me/games/game_files:c"
