@@ -98,6 +98,9 @@ void cdimage_qpos(const cdimage_t * img, uint32_t lba, cdimage_qpos_t * q);
 /* The built-in BIN/CUE format */
 extern const struct cdimage_format_ops cdimage_cue_format;
 
+/* The CHD plugin counts its chd_read() calls, for the tests */
+unsigned cdimage_chd_hunk_reads(const cdimage_t * img);
+
 #ifdef CDIMAGE_STANDALONE
 #include <stdio.h>
 #define cd_log(...) fprintf(stderr, "cdimage: " __VA_ARGS__)
