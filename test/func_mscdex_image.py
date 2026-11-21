@@ -943,6 +943,34 @@ def mscdex_image_files_chd(self):
     _cd_files(self, "simple/simple.chd", "CHD", optional=True)
 
 
+def mscdex_image_files_gog(self):
+    # A disc laid out as GOG ships it for DOSBox: the CUE sheet is
+    # GAME.INS, the data track GAME.GOG (named in the wrong case), and the
+    # audio track an Ogg Vorbis file whose FILE type says MP3.  The OGG
+    # needs the sndfile plugin; without it the image does not open.
+    if not shutil.which("ffmpeg"):
+        self.skipTest("needs ffmpeg to make an Ogg Vorbis track")
+    out = _make_images(self)
+    d = out / "gog"
+    d.mkdir(exist_ok=True)
+    shutil.copyfile(out / "multi" / "data.bin", d / "game.gog")
+    r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "s16le",
+                        "-ar", "44100", "-ac", "2",
+                        "-i", str(out / "multi" / "audio.bin"),
+                        "-c:a", "libvorbis", str(d / "track02.ogg")],
+                       capture_output=True, text=True)
+    if r.returncode:
+        self.skipTest("ffmpeg cannot encode Vorbis: " + r.stderr[-200:])
+    (d / "game.ins").write_bytes(
+        b'FILE "GAME.GOG" BINARY\r\n'
+        b'   TRACK 1 MODE1/2352\r\n'
+        b'   INDEX 1 00:00:00\r\n'
+        b'FILE "track02.ogg" MP3\r\n'
+        b'  TRACK 02 AUDIO\r\n'
+        b'      INDEX 01 00:00:00\r\n')
+    _cd_files(self, "gog/game.ins", "GOG", optional=True)
+
+
 def mscdex_image_real(self):
     # Optional: point DOSEMU_TEST_CD_IMAGES at one or more real .cue
     # files (space separated).  For each, SHSUCDX must mount it and DIR of

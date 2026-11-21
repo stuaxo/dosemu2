@@ -67,6 +67,26 @@ struct cdimage_format_ops {
 };
 void cdimage_format_register(const struct cdimage_format_ops *ops);
 
+/* An audio file that a CUE sheet uses as a track, as DOSBox allows:
+ * any FILE type but BINARY (WAVE, MP3, ...; the type is often wrong, so
+ * decoders go by the file's content).  Decoders come from plugins and
+ * register themselves; the CUE backend asks each in turn. */
+struct cdimage_audio_ops {
+  const char *name;
+  /* NULL if this decoder cannot read the file.  The audio must be
+   * 44100 Hz; *frames is its length in stereo sample pairs. */
+  void *(*open)(const char *path, uint64_t * frames);
+  /* Reads up to n sample pairs from pos into pcm as host-endian 16-bit
+   * stereo.  Returns the number read, -1 on error. */
+  int (*read)(void *h, uint64_t pos, int16_t * pcm, unsigned n);
+  void (*close)(void *h);
+};
+void cdimage_audio_register(const struct cdimage_audio_ops *ops);
+/* Opens an audio file with whichever decoder takes it; NULL if none. */
+const struct cdimage_audio_ops *cdimage_audio_open(const char *path,
+                                                   void **h,
+                                                   uint64_t * frames);
+
 /* True if a registered format claims the file. */
 bool cdimage_probe(const char *path);
 /* Opens an image in whichever format claims it. NULL on failure. */
